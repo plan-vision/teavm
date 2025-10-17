@@ -193,6 +193,9 @@ public class JSNativeInjector implements Injector, DependencyPlugin {
             case "dataToArray":
                 dataToArray(context, "$rt_objcls");
                 break;
+            case "dataToArrayObject":
+                dataToArrayObject(context, "$rt_objcls");
+                break;                                
             case "global": {
                 var cst = (ConstantExpr) context.getArgument(0);
                 var name = (String) cst.getValue();
@@ -386,6 +389,13 @@ public class JSNativeInjector implements Injector, DependencyPlugin {
     private void dataToArray(InjectorContext context, String className) {
         var writer = context.getWriter();
         writer.appendFunction("$rt_wrapArray").append("(").appendFunction(className).append(",").ws();
+        context.writeExpr(context.getArgument(0), Precedence.min());
+        writer.append(")");
+    }
+
+    private void dataToArrayObject(InjectorContext context, String className) {
+        var writer = context.getWriter();
+        writer.appendFunction("$rt_wrapArray").append("(").appendFunction(className).append("(),").ws();
         context.writeExpr(context.getArgument(0), Precedence.min());
         writer.append(")");
     }

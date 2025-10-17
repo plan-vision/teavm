@@ -124,6 +124,9 @@ public final class JSMethods {
     public static final MethodReference DATA_TO_ARRAY = new MethodReference(JS.class,
             "dataToArray", JSObject.class, JSObject[].class);
 
+     public static final MethodReference DATA_TO_ARRAY_OBJECT = new MethodReference(JS.class,
+            "dataToArrayObject", JSObject.class, Object[].class);            
+
     public static final MethodReference WRAP_STRING = new MethodReference(JS.class, "wrap",
             String.class, JSObject.class);
 

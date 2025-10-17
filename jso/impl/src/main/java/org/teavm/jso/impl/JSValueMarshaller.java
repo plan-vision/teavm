@@ -413,6 +413,10 @@ class JSValueMarshaller {
                 default:
                     break;
             }
+        } else if (type instanceof ValueType.Object) {
+            String className = ((ValueType.Object) type).getClassName();
+            if (!className.equals(JSObject.class.getName()))
+            	return invokeMethod(location, JSMethods.DATA_TO_ARRAY_OBJECT, var);
         }
         return invokeMethod(location, JSMethods.DATA_TO_ARRAY, var);
     }

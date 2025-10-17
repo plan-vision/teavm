@@ -22,6 +22,7 @@ import org.teavm.backend.javascript.codegen.SourceWriter;
 import org.teavm.backend.javascript.rendering.RenderingManager;
 import org.teavm.backend.javascript.spi.MethodContributor;
 import org.teavm.backend.javascript.spi.MethodContributorContext;
+import org.teavm.jso.impl.JSAliasRendererCustomWrapper;
 import org.teavm.jso.JSClass;
 import org.teavm.model.AnnotationReader;
 import org.teavm.model.ClassReader;
@@ -99,14 +100,21 @@ class JSAliasRenderer implements RendererListener, MethodContributor {
 
         writer.append("c").ws().append("=").ws().appendClass(classReader.getName()).append(".prototype;")
                 .softNewLine();
-
+        JSAliasRendererCustomWrapper customImpl = JSAliasRendererCustomWrapper.get();
         for (var aliasEntry : members.methods.entrySet()) {
+
             if (classReader.getMethod(aliasEntry.getValue().getDescriptor()) == null) {
                 continue;
             }
-            appendMethodAlias(aliasEntry.getKey());
-            writer.ws().append("=").ws().appendFunction("$rt_callWithReceiver").append("(")
-                    .appendMethod(aliasEntry.getValue()).append(");").softNewLine();
+            appendMethodAlias(aliasEntry.getKey());            
+            // support for custom implementation wrapper 
+            String impl =  customImpl == null ? null : customImpl.generate(aliasEntry.getValue().getClassName()+"."+aliasEntry.getKey());
+            if (impl == null) // default
+            	writer.ws().append("=").ws().appendFunction("$rt_callWithReceiver").append("(")
+            		.appendMethod(aliasEntry.getValue()).append(");").softNewLine();
+            else // custom
+            	writer.ws().append("=").ws().append(impl).append("(")
+        		.appendMethod(aliasEntry.getValue()).append(");").softNewLine();
         }
         for (var aliasEntry : members.properties.entrySet()) {
             var propInfo = aliasEntry.getValue();
