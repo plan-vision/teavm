@@ -22,7 +22,7 @@ import org.teavm.backend.javascript.codegen.SourceWriter;
 import org.teavm.backend.javascript.rendering.RenderingManager;
 import org.teavm.backend.javascript.spi.MethodContributor;
 import org.teavm.backend.javascript.spi.MethodContributorContext;
-import org.teavm.jso.JSAliasRendererCustomWrapper;
+import org.teavm.jso.impl.JSAliasRendererCustomWrapper;
 import org.teavm.jso.JSClass;
 import org.teavm.model.AnnotationReader;
 import org.teavm.model.ClassReader;

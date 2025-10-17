@@ -1,4 +1,4 @@
-package org.teavm.jso;
+package org.teavm.jso.impl;
 
 /* allows custom JS generation of 
   $rt_callWithReceiver(...) in JSAliasGenertor.java (jso-impl) */
