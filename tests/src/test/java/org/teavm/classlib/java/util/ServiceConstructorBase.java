@@ -1,5 +1,5 @@
 /*
- *  Copyright 2014 Alexey Andreev.
+ *  Copyright 2025 konsoletyper.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -13,13 +13,21 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
-package org.teavm.samples.benchmark.gwt;
+package org.teavm.classlib.java.util;
 
-public final class Performance {
-    private Performance() {
+import java.util.function.Supplier;
+
+public abstract class ServiceConstructorBase implements ServiceConstructor {
+    private Supplier<String> supplier;
+
+    public ServiceConstructorBase() {
+        supplier = this::bar;
     }
 
-    public static native double now() /*-{
-        return $wnd.performance.now();
-    }-*/;
+    @Override
+    public String foo() {
+        return supplier.get();
+    }
+
+    public abstract String bar();
 }

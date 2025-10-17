@@ -59,4 +59,20 @@ tasks {
     instrumentedJar {
         archiveFileName = "teavm-plugin.jar"
     }
+    build {
+        dependsOn(buildPlugin)
+    }
 }
+
+tasks.whenTaskAdded {
+    if (name == "relocateJar") {
+        val t = this
+        tasks.prepareTestSandbox {
+            dependsOn(t)
+        }
+        tasks.prepareSandbox {
+            dependsOn(t)
+        }
+    }
+}
+
