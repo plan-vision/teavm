@@ -132,8 +132,13 @@ public final class JSMethods {
             "dataToFloatArray", JS_OBJECT, ValueType.arrayOf(ValueType.FLOAT));
     public static final MethodReference DATA_TO_DOUBLE_ARRAY = new MethodReference(JS_CLASS,
             "dataToDoubleArray", JS_OBJECT, ValueType.arrayOf(ValueType.DOUBLE));
+
+            
     public static final MethodReference DATA_TO_ARRAY = new MethodReference(JS_CLASS,
             "dataToArray", JS_OBJECT, ValueType.arrayOf(JS_OBJECT));
+     public static final MethodReference DATA_TO_ARRAY_OBJECT = new MethodReference(JS_CLASS,
+            "dataToArrayObject", JS_OBJECT, ValueType.arrayOf(OBJECT));
+           
 
     public static final MethodReference WRAP_STRING = new MethodReference(JS_CLASS, "wrap",
             STRING, JS_OBJECT);

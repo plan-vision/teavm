@@ -92,6 +92,11 @@ public final class JS {
     public static native JSObject[] dataToArray(JSObject obj);
 
     @InjectedBy(JSNativeInjector.class)
+    @PluggableDependency(JSNativeInjector.class)
+    @NoSideEffects
+    public static native Object[] dataToArrayObject(JSObject obj);
+
+    @InjectedBy(JSNativeInjector.class)
     @NoSideEffects
     @Import(name = "wrapByte", module = "teavmJso")
     public static native JSObject wrap(byte value);
