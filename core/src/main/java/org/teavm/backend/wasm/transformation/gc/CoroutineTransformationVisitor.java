@@ -261,11 +261,17 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
         var oldStackTypes = stackTypes;
         var elseBlock = new WasmBlock(false);
         var thenBlock = new WasmBlock(false);
-        thenBlock.setType(expression.getType());
-        elseBlock.setType(expression.getType());
+
+        var outputTypes = new ArrayList<>(stackTypes);
+        if (expression.getType() != null) {
+            outputTypes.addAll(expression.getType().getOutputTypes());
+        }
+        thenBlock.setType(functionTypes.blockType(outputTypes));
+        elseBlock.setType(functionTypes.blockType(stackTypes));
+
         var br = new WasmBranch(expression.getCondition(), elseBlock);
         resultList.add(br);
-        stackTypes = new ArrayList<>();
+        stackTypes = new ArrayList<>(oldStackTypes);
         visitMany(expression.getElseBlock().getBody());
         elseBlock.getBody().addAll(resultList);
         resultList.clear();
@@ -273,7 +279,7 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
         if (!elseBlock.getBody().get(elseBlock.getBody().size() - 1).isTerminating()) {
             elseBlock.getBody().add(new WasmBreak(thenBlock));
         }
-        stackTypes = new ArrayList<>();
+        stackTypes = new ArrayList<>(oldStackTypes);
         visitMany(expression.getThenBlock().getBody());
         thenBlock.getBody().addAll(resultList);
         resultList.clear();
@@ -385,12 +391,16 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
                     e.getArguments().addAll(args);
                 },
                 false,
+                expression.getFunction().getType().getParameterTypes(),
                 expression.getFunction().getType().getReturnTypes()
         );
     }
 
     @Override
     public void visit(WasmIndirectCall expression) {
+        var argTypes = new ArrayList<WasmType>();
+        argTypes.add(WasmType.INT32);
+        argTypes.addAll(expression.getType().getParameterTypes());
         visitCall(
                 expression,
                 expression.isSuspensionPoint(),
@@ -406,12 +416,15 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
                     e.getArguments().addAll(args.subList(1, args.size()));
                 },
                 false,
+                argTypes,
                 expression.getType().getReturnTypes()
         );
     }
 
     @Override
     public void visit(WasmCallReference expression) {
+        var argTypes = new ArrayList<WasmType>(expression.getType().getParameterTypes());
+        argTypes.add(expression.getType().getReference());
         visitCall(
                 expression,
                 expression.isSuspensionPoint(),
@@ -427,6 +440,7 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
                     e.getArguments().addAll(args.subList(1, args.size()));
                 },
                 true,
+                argTypes,
                 expression.getType().getReturnTypes()
         );
     }
@@ -436,6 +450,7 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
             Function<T, List<WasmExpression>> argsGetter,
             BiConsumer<T, List<? extends WasmExpression>> argsSetter,
             boolean saveLastArg,
+            List<? extends WasmType> argTypes,
             List<? extends WasmType> returnTypes) {
         if (!collector.isSuspending(expression)) {
             addExpr(expression);
@@ -447,7 +462,6 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
         }
 
         var arguments = argsGetter.apply(expression);
-        var argTypes = new WasmType[arguments.size()];
         for (var i = 0; i < arguments.size(); ++i) {
             var arg = arguments.get(i);
             arg.acceptVisitor(typeInference);
@@ -456,13 +470,12 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
                 arg.acceptVisitor(this);
             } else {
                 resultList.add(arg);
-            }
-            if (type != null) {
                 stackTypes.add(type);
             }
             arguments.set(i, new WasmPop(type));
-            argTypes[i] = type;
         }
+        stackTypes.subList(stackTypes.size() - argTypes.size(), stackTypes.size()).clear();
+        stackTypes.addAll(argTypes);
         argsSetter.accept(expression, arguments);
 
         var argsBlockType = functionTypes.blockType(stackTypes);
@@ -477,10 +490,10 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
             restore(outerBlock.getBody(), type);
         }
         if (saveLastArg) {
-            for (int i = 0; i < argTypes.length - 1; i++) {
-                pushDefault(outerBlock.getBody(), argTypes[i]);
+            for (int i = 0; i < argTypes.size() - 1; i++) {
+                pushDefault(outerBlock.getBody(), argTypes.get(i));
             }
-            var type = argTypes[argTypes.length - 1];
+            var type = argTypes.get(argTypes.size() - 1);
             restore(outerBlock.getBody(), type);
         } else {
             for (var type : argTypes) {
@@ -490,7 +503,7 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
 
         resultList.add(outerBlock);
         if (saveLastArg) {
-            var type = argTypes[argTypes.length - 1];
+            var type = argTypes.get(argTypes.size() - 1);
             resultList.add(new WasmSetLocal(tmpValueLocalSupplier.get(), new WasmPop(type)));
             resultList.add(new WasmCast(new WasmGetLocal(tmpValueLocalSupplier.get()), (WasmType.Reference) type));
         }
@@ -509,7 +522,7 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
             suspendCheck.getThenBlock().getBody().add(new WasmDrop(new WasmPop(returnTypes.get(i))));
         }
         if (saveLastArg) {
-            var type = (WasmType.Reference) argTypes[argTypes.length - 1];
+            var type = (WasmType.Reference) argTypes.get(argTypes.size() - 1);
             suspendCheck.getThenBlock().getBody().add(new WasmCast(new WasmGetLocal(tmpValueLocalSupplier.get()),
                     type));
             save(suspendCheck.getThenBlock().getBody(), type);
@@ -890,7 +903,11 @@ class CoroutineTransformationVisitor implements WasmExpressionVisitor {
         for (var i = 0; i <= last; ++i) {
             var arg = args.get(i);
             if (arg != null) {
-                arg.acceptVisitor(this);
+                if (collector.isSuspending(arg)) {
+                    arg.acceptVisitor(this);
+                } else {
+                    addExpr(arg);
+                }
                 ++depth;
             }
         }
