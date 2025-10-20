@@ -394,10 +394,20 @@ public class JSNativeInjector implements Injector, DependencyPlugin {
     }
 
     private void dataToArrayObject(InjectorContext context, String className) {
-        var writer = context.getWriter();
+        /*var writer = context.getWriter();
         writer.appendFunction("$rt_wrapArray").append("(").appendFunction(className).append("(),").ws();
         context.writeExpr(context.getArgument(0), Precedence.min());
+        writer.append(")");*/
+        // TODO ADD PROPER MAPPING !
+        String pfx="(function(a){ for (var i=0;i<a.length;i++) {var v=a[i];if(v===undefined)a[i]=null;else switch(typeof v) {case'string':a[i]=$rt_str(v);break;case'bigint':a[i]=Long_create(v) } } return a })(";
+        String sfx=")";
+        // TODO ADD PROPER MAPPING !
+        writer.appendFunction("$rt_wrapArray").append("(").appendFunction(className).append("(),").ws();
+        writer.append(pfx);
+        context.writeExpr(context.getArgument(0), Precedence.min());
+        writer.append(sfx);
         writer.append(")");
+
     }
 
     @Override
