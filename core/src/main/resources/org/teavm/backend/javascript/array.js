@@ -21,24 +21,6 @@ let $rt_createArray = (cls, sz) => {
     return new ($rt_arraycls(cls))(data);
 }
 let $rt_wrapArray = (cls, data) => new ($rt_arraycls(cls))(data);
-let $rt_wrapArrayObject = (cls, data) => {
-    for (var i=0;i<data.length;i++) {
-        var t = data[i];
-        if (t === undefined)
-            data[i]=null;
-        else {
-            switch (typeof t) {
-                case 'string':
-                    data[i]=$rt_str(t);
-                    break;
-                case 'bigint':
-                    data[i]=Long_create(t);
-                    break;
-            }
-        }
-    } 
-    return new ($rt_arraycls(cls))(data); 
-};
 
 let $rt_createUnfilledArray = (cls, sz) => new ($rt_arraycls(cls))(new teavm_globals.Array(sz));
 let $rt_createLongArray = sz => new $rt_longArrayCls(new teavm_globals.BigInt64Array(sz));
