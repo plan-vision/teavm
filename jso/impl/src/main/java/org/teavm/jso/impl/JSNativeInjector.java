@@ -395,7 +395,7 @@ public class JSNativeInjector implements Injector, DependencyPlugin {
 
     private void dataToArrayObject(InjectorContext context, String className) {
         var writer = context.getWriter();
-        writer.appendFunction("$rt_wrapArray").append("(").appendFunction(className).append("(),").ws();
+        writer.appendFunction("$rt_wrapArrayObject").append("(").appendFunction(className).append("(),").ws();
         context.writeExpr(context.getArgument(0), Precedence.min());
         writer.append(")");
     }
@@ -445,6 +445,9 @@ public class JSNativeInjector implements Injector, DependencyPlugin {
             case "dataToArray":
                 method.getResult().propagate(agent.getType("[Ljava/lang/Object;"));
                 break;
+             case "dataToArrayObject":
+                method.getResult().propagate(agent.getType("[Ljava/lang/Object;"));
+                break;                
         }
     }
 
