@@ -285,6 +285,41 @@ public class ClassGenerator implements Generator, Injector, DependencyPlugin {
         if (method.getResultType() != ValueType.VOID) {
             writer.append("return ");
         }
+
+        boolean boxed=false;
+        if (method.getResultType() instanceof ValueType.Primitive) {
+            switch (((ValueType.Primitive) method.getResultType()).getKind()) {
+                case BOOLEAN:
+                    writer.appendMethod(new MethodReference(Boolean.class, "valueOf", boolean.class,
+                            Boolean.class));
+                    break;
+                case BYTE:
+                    writer.appendMethod(new MethodReference(Byte.class, "valueOf", byte.class, Byte.class));
+                    break;
+                case SHORT:
+                    writer.appendMethod(new MethodReference(Short.class, "valueOf", short.class, Short.class));
+                    break;
+                case CHARACTER:
+                    writer.appendMethod(new MethodReference(Character.class, "valueOf", char.class,
+                            Character.class));
+                    break;
+                case INTEGER:
+                    writer.appendMethod(new MethodReference(Integer.class, "valueOf", int.class, Integer.class));
+                    break;
+                case LONG:
+                    writer.appendMethod(new MethodReference(Long.class, "valueOf", long.class, Long.class));
+                    break;
+                case FLOAT:
+                    writer.appendMethod(new MethodReference(Float.class, "valueOf", float.class, Float.class));
+                    break;
+                case DOUBLE:
+                    writer.appendMethod(new MethodReference(Double.class, "valueOf", double.class, Double.class));
+                    break;
+            }
+            writer.append('(');
+            boxed = true;
+        }
+
         var receiverWritten = false;
         if (!method.hasModifier(ElementModifier.STATIC) && !method.hasModifier(ElementModifier.FINAL)
                 && method.getLevel() != AccessLevel.PRIVATE && !method.getName().equals("<init>")) {
@@ -308,6 +343,10 @@ public class ClassGenerator implements Generator, Injector, DependencyPlugin {
             int index = i;
             unboxIfNecessary(writer, method.parameterType(i), () -> writer.append("args[" + index + "]"));
         }
+
+        if (boxed) 
+            writer.append(")");        
+
         writer.append(");").softNewLine();
 
         if (method.getResultType() == ValueType.VOID) {
