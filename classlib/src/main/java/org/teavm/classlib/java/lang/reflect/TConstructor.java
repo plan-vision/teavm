@@ -15,60 +15,21 @@
  */
 package org.teavm.classlib.java.lang.reflect;
 
-import org.teavm.classlib.PlatformDetector;
-import org.teavm.classlib.impl.reflection.Converter;
-import org.teavm.classlib.impl.reflection.Flags;
-import org.teavm.classlib.impl.reflection.MethodCaller;
 import org.teavm.classlib.java.lang.TClass;
 import org.teavm.classlib.java.lang.TIllegalAccessException;
 import org.teavm.classlib.java.lang.TIllegalArgumentException;
 import org.teavm.classlib.java.lang.TInstantiationException;
-import org.teavm.classlib.java.lang.TObject;
+import org.teavm.runtime.reflect.MethodInfo;
+import org.teavm.runtime.reflect.ModifiersInfo;
 
-public class TConstructor<T> extends TAccessibleObject implements TMember {
-    private TClass<T> declaringClass;
-    private String name;
-    private int modifiers;
-    private int accessLevel;
-    private TClass<?>[] parameterTypes;
-    private MethodCaller caller;
-
-    public TConstructor(TClass<T> declaringClass, String name, int modifiers, int accessLevel,
-            TClass<?>[] parameterTypes, MethodCaller caller) {
-        this.declaringClass = declaringClass;
-        this.name = name;
-        this.modifiers = modifiers;
-        this.accessLevel = accessLevel;
-        this.parameterTypes = parameterTypes;
-        this.caller = caller;
-    }
-
-    @Override
-    public TClass<T> getDeclaringClass() {
-        return declaringClass;
+public class TConstructor<T> extends TExecutable implements TMember {
+    public TConstructor(TClass<?> declaringClass, MethodInfo methodInfo) {
+        super(declaringClass, methodInfo);
     }
 
     @Override
     public String getName() {
-        return name;
-    }
-
-    @Override
-    public int getModifiers() {
-        return Flags.getModifiers(modifiers, accessLevel);
-    }
-
-    @Override
-    public boolean isSynthetic() {
-        return (modifiers & Flags.SYNTHETIC) != 0;
-    }
-
-    public TClass<?>[] getParameterTypes() {
-        return parameterTypes.clone();
-    }
-
-    public int getParameterCount() {
-        return parameterTypes.length;
+        return declaringClass.getSimpleName();
     }
 
     @Override
@@ -78,7 +39,7 @@ public class TConstructor<T> extends TAccessibleObject implements TMember {
         if (sb.length() > 0) {
             sb.append(' ');
         }
-        sb.append(declaringClass.getName().toString()).append('(');
+        sb.append(declaringClass.getName()).append('(');
         TClass<?>[] parameterTypes = getParameterTypes();
         for (int i = 0; i < parameterTypes.length; ++i) {
             if (i > 0) {
@@ -92,36 +53,18 @@ public class TConstructor<T> extends TAccessibleObject implements TMember {
     @SuppressWarnings("unchecked")
     public T newInstance(Object... initargs) throws TInstantiationException, TIllegalAccessException,
             TIllegalArgumentException, TInvocationTargetException {
-        if ((modifiers & Flags.ABSTRACT) != 0) {
+        if ((methodInfo.modifiers() & ModifiersInfo.ABSTRACT) != 0) {
             throw new TInstantiationException();
         }
-        if (caller == null) {
-            throw new TIllegalAccessException();
-        }
 
-        if (initargs.length != parameterTypes.length) {
+        if (initargs.length != methodInfo.parameterCount()) {
             throw new TIllegalArgumentException();
         }
-        for (int i = 0; i < initargs.length; ++i) {
-            if (!parameterTypes[i].isPrimitive() && initargs[i] != null
-                    && !parameterTypes[i].isInstance((TObject) initargs[i])) {
-                throw new TIllegalArgumentException();
-            }
-            if (parameterTypes[i].isPrimitive() && initargs[i] == null) {
-                throw new TIllegalArgumentException();
-            }
-        }
+        validateArgs(initargs);
+        declaringClass.initialize();
 
-        if (PlatformDetector.isJavaScript()) {
-            var instance = Converter.toJava(declaringClass.newEmptyInstance());
-            caller.call(instance, initargs);
-            return (T) instance;
-        } else {
-            return (T) caller.call(null, initargs);
-        }
-    }
-
-    public boolean isVarArgs() {
-        return (modifiers & Flags.VARARGS) != 0;
+        var instance = declaringClass.getClassInfo().newInstance();
+        methodInfo.call(instance, initargs);
+        return (T) instance;
     }
 }

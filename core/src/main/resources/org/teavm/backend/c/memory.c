@@ -17,6 +17,13 @@
     #include "heaptrace.h"
 #endif
 
+#if TEAVM_PSP
+int64_t teavm_pageSize();
+void* teavm_virtualAlloc(int64_t size);
+void teavm_virtualCommit(void* address, int64_t size);
+void teavm_virtualUncommit(void* address, int64_t size);
+#endif
+
 void* teavm_gc_heapAddress = NULL;
 void* teavm_gc_gcStorageAddress = NULL;
 int32_t teavm_gc_gcStorageSize = INT32_C(0);
@@ -28,7 +35,19 @@ int64_t teavm_gc_minAvailableBytes;
 int64_t teavm_gc_maxAvailableBytes;
 static int64_t teavm_gc_pageSize;
 
-#if TEAVM_UNIX
+#if defined(__EMSCRIPTEN__)
+    static void* teavm_virtualAlloc(int64_t size) {
+        return malloc(size);
+    }
+    static void teavm_virtualCommit(void* address, int64_t size) {
+    }
+    static void teavm_virtualUncommit(void* address, int64_t size) {
+        mprotect(address, size, PROT_NONE);
+    }
+    static int64_t teavm_pageSize() {
+        return 1 << 16;
+    }
+#elif TEAVM_UNIX
     static void* teavm_virtualAlloc(int64_t size) {
         return mmap(NULL, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
     }
@@ -244,3 +263,22 @@ void teavm_initStaticGcRoots() {
         builder = next;
     }
 }
+
+#if TEAVM_PSP
+
+int64_t teavm_pageSize() {
+    return 4096LL;
+}
+
+void* teavm_virtualAlloc(int64_t size) {
+    return malloc(size);
+}
+
+void teavm_virtualCommit(void* addr, int64_t size) {
+    // No-op for PSP
+}
+
+void teavm_virtualUncommit(void* addr, int64_t size) {
+    // No-op for PSP
+}
+#endif

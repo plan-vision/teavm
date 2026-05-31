@@ -36,7 +36,7 @@ pluginManagement {
         gradlePluginPortal()
     }
     plugins {
-        id("org.gretty") version "4.0.3" apply false
+        id("org.gretty") version "5.0.2" apply false
     }
 }
 
@@ -46,7 +46,7 @@ buildscript {
         mavenCentral()
         gradlePluginPortal()
     }
-    dependencies.classpath("org.gretty:org.gretty.gradle.plugin:4.0.3")
+    dependencies.classpath("org.gretty:org.gretty.gradle.plugin:5.0.2")
 }
 
 rootProject.name = "teavmSamples"
@@ -63,6 +63,8 @@ include("scala")
 include("web-apis")
 include("software3d")
 include("module-test")
+include("wasm-sab")
+include("emscripten")
 
 gradle.allprojects {
     apply<WarPlugin>()
@@ -91,7 +93,7 @@ gradle.afterProject {
                     .findVersion("checkstyle").get().requiredVersion
             configDirectory = File(settings.rootDir, "../config/checkstyle")
         }
-        java.sourceCompatibility = JavaVersion.VERSION_11
-        java.targetCompatibility = JavaVersion.VERSION_11
+        java.sourceCompatibility = JavaVersion.VERSION_21
+        java.targetCompatibility = JavaVersion.VERSION_21
     }
 }

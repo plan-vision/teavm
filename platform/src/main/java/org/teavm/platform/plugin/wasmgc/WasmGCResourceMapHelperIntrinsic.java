@@ -16,34 +16,42 @@
 package org.teavm.platform.plugin.wasmgc;
 
 import org.teavm.ast.InvocationExpr;
-import org.teavm.backend.wasm.intrinsics.gc.WasmGCIntrinsic;
-import org.teavm.backend.wasm.intrinsics.gc.WasmGCIntrinsicContext;
+import org.teavm.backend.wasm.generate.classes.WasmGCTypeMapper;
+import org.teavm.backend.wasm.intrinsics.WasmGCInlineIntrinsic;
+import org.teavm.backend.wasm.intrinsics.WasmGCInlineIntrinsicContext;
 import org.teavm.backend.wasm.model.WasmArray;
 import org.teavm.backend.wasm.model.WasmType;
-import org.teavm.backend.wasm.model.expression.WasmArrayGet;
-import org.teavm.backend.wasm.model.expression.WasmArrayLength;
-import org.teavm.backend.wasm.model.expression.WasmExpression;
+import org.teavm.backend.wasm.model.instruction.WasmInstructionBuilder;
 import org.teavm.model.ValueType;
 import org.teavm.platform.metadata.ResourceMap;
 
-public class WasmGCResourceMapHelperIntrinsic implements WasmGCIntrinsic {
+public class WasmGCResourceMapHelperIntrinsic implements WasmGCInlineIntrinsic {
+    private WasmGCTypeMapper typeMapper;
+
+    public WasmGCResourceMapHelperIntrinsic(WasmGCTypeMapper typeMapper) {
+        this.typeMapper = typeMapper;
+    }
+
     @Override
-    public WasmExpression apply(InvocationExpr invocation, WasmGCIntrinsicContext context) {
+    public void apply(InvocationExpr invocation, WasmGCInlineIntrinsicContext context,
+            WasmInstructionBuilder builder) {
         switch (invocation.getMethod().getName()) {
             case "entryCount":
-                return new WasmArrayLength(context.generate(invocation.getArguments().get(0)));
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.arrayLength();
+                break;
             case "entry":
-                return new WasmArrayGet(getArrayType(context),
-                        context.generate(invocation.getArguments().get(0)),
-                        context.generate(invocation.getArguments().get(1)));
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.arrayGet(getArrayType());
+                break;
             default:
                 throw new IllegalArgumentException();
         }
     }
 
-    private WasmArray getArrayType(WasmGCIntrinsicContext context) {
-        var type = (WasmType.CompositeReference) context.typeMapper().mapType(
-                ValueType.object(ResourceMap.class.getName()));
+    private WasmArray getArrayType() {
+        var type = (WasmType.CompositeReference) typeMapper.mapType(ValueType.object(ResourceMap.class.getName()));
         return (WasmArray) type.composite;
     }
 }

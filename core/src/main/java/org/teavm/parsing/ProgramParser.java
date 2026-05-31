@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.Attribute;
+import org.objectweb.asm.ConstantDynamic;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
@@ -38,6 +39,7 @@ import org.objectweb.asm.tree.LocalVariableNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TryCatchBlockNode;
 import org.teavm.model.BasicBlock;
+import org.teavm.model.DynamicConstant;
 import org.teavm.model.FieldReference;
 import org.teavm.model.Instruction;
 import org.teavm.model.InvokeDynamicInstruction;
@@ -296,7 +298,7 @@ public class ProgramParser {
             instructions.get(index).accept(methodVisitor);
             stackAfter[index] = stack;
             flushInstructions();
-            if (nextIndexes.length != 1) {
+            if (nextIndexes.length > 1) {
                 emitNextBasicBlock();
             }
             for (int next : nextIndexes) {
@@ -605,6 +607,15 @@ public class ProgramParser {
                 }
             } else if (value instanceof Handle) {
                 return new RuntimeConstant(parseHandle((Handle) value));
+            } else if (value instanceof ConstantDynamic) {
+                var cd = (ConstantDynamic) value;
+                var args = new RuntimeConstant[cd.getBootstrapMethodArgumentCount()];
+                for (var i = 0; i < args.length; i++) {
+                    args[i] = convertConstant(cd.getBootstrapMethodArgument(i));
+                }
+                var cst = new DynamicConstant(cd.getName(), ValueType.parse(cd.getDescriptor()),
+                        parseHandle(cd.getBootstrapMethod()), List.of(args));
+                return new RuntimeConstant(cst);
             } else {
                 throw new IllegalArgumentException("Unknown runtime constant: " + value);
             }
@@ -823,42 +834,42 @@ public class ProgramParser {
                 case Opcodes.IF_ICMPEQ: {
                     int b = popSingle();
                     int a = popSingle();
-                    emitBinary(BinaryOperation.COMPARE, NumericOperandType.INT, a, b, a);
+                    emitBinary(BinaryOperation.COMPARE_GREATER, NumericOperandType.INT, a, b, a);
                     emitBranching(BranchingCondition.EQUAL, a, target);
                     break;
                 }
                 case Opcodes.IF_ICMPNE: {
                     int b = popSingle();
                     int a = popSingle();
-                    emitBinary(BinaryOperation.COMPARE, NumericOperandType.INT, a, b, a);
+                    emitBinary(BinaryOperation.COMPARE_GREATER, NumericOperandType.INT, a, b, a);
                     emitBranching(BranchingCondition.NOT_EQUAL, a, target);
                     break;
                 }
                 case Opcodes.IF_ICMPGE: {
                     int b = popSingle();
                     int a = popSingle();
-                    emitBinary(BinaryOperation.COMPARE, NumericOperandType.INT, a, b, a);
+                    emitBinary(BinaryOperation.COMPARE_GREATER, NumericOperandType.INT, a, b, a);
                     emitBranching(BranchingCondition.GREATER_OR_EQUAL, a, target);
                     break;
                 }
                 case Opcodes.IF_ICMPGT: {
                     int b = popSingle();
                     int a = popSingle();
-                    emitBinary(BinaryOperation.COMPARE, NumericOperandType.INT, a, b, a);
+                    emitBinary(BinaryOperation.COMPARE_GREATER, NumericOperandType.INT, a, b, a);
                     emitBranching(BranchingCondition.GREATER, a, target);
                     break;
                 }
                 case Opcodes.IF_ICMPLE: {
                     int b = popSingle();
                     int a = popSingle();
-                    emitBinary(BinaryOperation.COMPARE, NumericOperandType.INT, a, b, a);
+                    emitBinary(BinaryOperation.COMPARE_GREATER, NumericOperandType.INT, a, b, a);
                     emitBranching(BranchingCondition.LESS_OR_EQUAL, a, target);
                     break;
                 }
                 case Opcodes.IF_ICMPLT: {
                     int b = popSingle();
                     int a = popSingle();
-                    emitBinary(BinaryOperation.COMPARE, NumericOperandType.INT, a, b, a);
+                    emitBinary(BinaryOperation.COMPARE_GREATER, NumericOperandType.INT, a, b, a);
                     emitBranching(BranchingCondition.LESS, a, target);
                     break;
                 }
@@ -1432,27 +1443,39 @@ public class ProgramParser {
                     emitNeg(NumericOperandType.DOUBLE, a, r);
                     break;
                 }
-                case Opcodes.FCMPG:
+                case Opcodes.FCMPG: {
+                    int b = popSingle();
+                    int a = popSingle();
+                    int r = pushSingle();
+                    emitBinary(BinaryOperation.COMPARE_GREATER, NumericOperandType.FLOAT, a, b, r);
+                    break;
+                }
                 case Opcodes.FCMPL: {
                     int b = popSingle();
                     int a = popSingle();
                     int r = pushSingle();
-                    emitBinary(BinaryOperation.COMPARE, NumericOperandType.FLOAT, a, b, r);
+                    emitBinary(BinaryOperation.COMPARE_LESS, NumericOperandType.FLOAT, a, b, r);
                     break;
                 }
                 case Opcodes.LCMP: {
                     int b = popDouble();
                     int a = popDouble();
                     int r = pushSingle();
-                    emitBinary(BinaryOperation.COMPARE, NumericOperandType.LONG, a, b, r);
+                    emitBinary(BinaryOperation.COMPARE_LESS, NumericOperandType.LONG, a, b, r);
                     break;
                 }
-                case Opcodes.DCMPG:
+                case Opcodes.DCMPG: {
+                    int b = popDouble();
+                    int a = popDouble();
+                    int r = pushSingle();
+                    emitBinary(BinaryOperation.COMPARE_GREATER, NumericOperandType.DOUBLE, a, b, r);
+                    break;
+                }
                 case Opcodes.DCMPL: {
                     int b = popDouble();
                     int a = popDouble();
                     int r = pushSingle();
-                    emitBinary(BinaryOperation.COMPARE, NumericOperandType.DOUBLE, a, b, r);
+                    emitBinary(BinaryOperation.COMPARE_LESS, NumericOperandType.DOUBLE, a, b, r);
                     break;
                 }
                 case Opcodes.ISHL: {

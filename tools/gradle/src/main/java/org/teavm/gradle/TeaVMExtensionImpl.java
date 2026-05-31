@@ -16,7 +16,8 @@
 package org.teavm.gradle;
 
 import groovy.lang.Closure;
-import javax.inject.Inject;
+import java.util.Collections;
+import java.util.List;
 import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.api.model.ObjectFactory;
@@ -25,34 +26,25 @@ import org.teavm.gradle.api.OptimizationLevel;
 import org.teavm.gradle.api.SourceFilePolicy;
 import org.teavm.gradle.api.TeaVMCConfiguration;
 import org.teavm.gradle.api.TeaVMCommonConfiguration;
-import org.teavm.gradle.api.TeaVMDevServerConfiguration;
 import org.teavm.gradle.api.TeaVMExtension;
 import org.teavm.gradle.api.TeaVMJSConfiguration;
-import org.teavm.gradle.api.TeaVMWasiConfiguration;
-import org.teavm.gradle.api.TeaVMWasmConfiguration;
 import org.teavm.gradle.api.TeaVMWasmGCConfiguration;
 import org.teavm.gradle.api.WasmDebugInfoLevel;
 import org.teavm.gradle.api.WasmDebugInfoLocation;
 
 class TeaVMExtensionImpl extends TeaVMBaseExtensionImpl implements TeaVMExtension {
     private TeaVMJSConfiguration js;
-    private TeaVMWasmConfiguration wasm;
-    private TeaVMWasiConfiguration wasi;
     private TeaVMWasmGCConfiguration wasmGC;
     private TeaVMCConfiguration c;
     private TeaVMCommonConfiguration all;
 
     TeaVMExtensionImpl(Project project, ObjectFactory objectFactory) {
         super(project, objectFactory);
-        js = objectFactory.newInstance(JsConfigImpl.class);
-        wasm = objectFactory.newInstance(TeaVMWasmConfiguration.class);
-        wasi = objectFactory.newInstance(TeaVMWasiConfiguration.class);
+        js = objectFactory.newInstance(TeaVMJSConfiguration.class);
         wasmGC = objectFactory.newInstance(TeaVMWasmGCConfiguration.class);
         c = objectFactory.newInstance(TeaVMCConfiguration.class);
         all = objectFactory.newInstance(TeaVMCommonConfiguration.class);
         inherit(js, all);
-        inherit(wasm, all);
-        inherit(wasi, all);
         inherit(wasmGC, all);
         inherit(c, all);
         setupDefaults();
@@ -60,29 +52,29 @@ class TeaVMExtensionImpl extends TeaVMBaseExtensionImpl implements TeaVMExtensio
 
     private void setupDefaults() {
         setupJsDefaults();
-        setupWasmDefaults();
-        setupWasiDefaults();
         setupWasmGCDefaults();
         setupCDefaults();
         setupAllDefaults();
     }
 
     private void setupJsDefaults() {
+        var isDebug = property("debug").map(Boolean::parseBoolean).orElse(false);
+        var isNotDebug = isDebug.map(x -> !x);
         js.getRelativePathInOutputDir().convention("js");
-        js.getObfuscated().convention(property("js.obfuscated").map(Boolean::parseBoolean).orElse(true));
-        js.getSourceMap().convention(property("js.sourceMap").map(Boolean::parseBoolean).orElse(false));
+        js.getObfuscated().convention(property("js.obfuscated").map(Boolean::parseBoolean).orElse(isNotDebug));
+        js.getSourceMap().convention(property("js.sourceMap").map(Boolean::parseBoolean).orElse(isDebug));
         js.getStrict().convention(property("js.strict").map(Boolean::parseBoolean).orElse(false));
         js.getModuleType().convention(property("js.moduleType").map(JSModuleType::valueOf).orElse(JSModuleType.UMD));
         js.getEntryPointName().convention("main");
         js.getTargetFileName().convention(project.provider(() -> project.getName() + ".js"));
         js.getAddedToWebApp().convention(property("js.addedToWebApp").map(Boolean::parseBoolean).orElse(false));
         js.getOptimization().convention(property("js.optimization").map(OptimizationLevel::valueOf)
-                .orElse(OptimizationLevel.BALANCED));
+                .orElse(isDebug.map(x -> x ? OptimizationLevel.NONE : OptimizationLevel.BALANCED)));
         js.getSourceFilePolicy().convention(property("js.sourceFilePolicy")
                 .map(SourceFilePolicy::valueOf)
                 .orElse(SourceFilePolicy.LINK_LOCAL_FILES));
         js.getDevServer().getStackDeobfuscated().convention(property("js.devServer.stackDeobfuscated")
-                .map(Boolean::parseBoolean));
+                .map(Boolean::parseBoolean).orElse(isDebug));
         js.getDevServer().getIndicator().convention(property("js.devServer.indicator").map(Boolean::parseBoolean));
         js.getDevServer().getAutoReload().convention(property("js.devServer.autoReload").map(Boolean::parseBoolean));
         js.getDevServer().getPort().convention(property("js.devServer.port").map(Integer::parseInt));
@@ -91,35 +83,25 @@ class TeaVMExtensionImpl extends TeaVMBaseExtensionImpl implements TeaVMExtensio
         js.getDevServer().getProcessMemory().convention(property("js.devServer.memory").map(Integer::parseInt));
     }
 
-    private void setupWasmDefaults() {
-        wasm.getRelativePathInOutputDir().convention("wasm");
-        wasm.getMinHeapSize().convention(1);
-        wasm.getMaxHeapSize().convention(16);
-        wasm.getOptimization().convention(property("wasm.optimization").map(OptimizationLevel::valueOf)
-                .orElse(OptimizationLevel.AGGRESSIVE));
-        wasm.getTargetFileName().convention(project.provider(() -> project.getName() + ".wasm"));
-        wasm.getAddedToWebApp().convention(property("wasm.addedToWebApp").map(Boolean::parseBoolean).orElse(false));
-        wasm.getExceptionsUsed().convention(property("wasm.exceptionsUsed").map(Boolean::parseBoolean).orElse(true));
-    }
-
     private void setupWasmGCDefaults() {
+        var isDebug = property("debug").map(Boolean::parseBoolean).orElse(false);
+        var isNotDebug = isDebug.map(x -> !x);
         wasmGC.getRelativePathInOutputDir().convention("wasm-gc");
         wasmGC.getOptimization().convention(property("wasm-gc.optimization").map(OptimizationLevel::valueOf)
-                .orElse(OptimizationLevel.AGGRESSIVE));
+                .orElse(isDebug.map(x -> x ? OptimizationLevel.NONE : OptimizationLevel.AGGRESSIVE)));
         wasmGC.getTargetFileName().convention(project.provider(() -> project.getName() + ".wasm"));
         wasmGC.getAddedToWebApp().convention(property("wasm-gc.addedToWebApp")
                 .map(Boolean::parseBoolean).orElse(false));
         wasmGC.getStrict().convention(property("wasm-gc.strict").map(Boolean::parseBoolean).orElse(true));
         wasmGC.getCopyRuntime().convention(property("wasm-gc.copyRuntime").map(Boolean::parseBoolean).orElse(true));
-        wasmGC.getObfuscated().convention(property("wasm-gc.obfuscated").map(Boolean::parseBoolean).orElse(true));
+        wasmGC.getObfuscated().convention(property("wasm-gc.obfuscated").map(Boolean::parseBoolean)
+                .orElse(isNotDebug));
         wasmGC.getDisassembly().convention(property("wasm-gc.disassembly").map(Boolean::parseBoolean).orElse(false));
-        wasmGC.getDebugInformation().convention(property("wasm-gc.debugInformation").map(Boolean::parseBoolean)
-                .orElse(false));
         wasmGC.getDebugInfoLocation().convention(property("wasm-gc.debugInformation.location")
                 .map(v -> WasmDebugInfoLocation.valueOf(v.toUpperCase())).orElse(WasmDebugInfoLocation.EXTERNAL));
         wasmGC.getDebugInfoLevel().convention(property("wasm-gc.debugInformation.level")
                 .map(v -> WasmDebugInfoLevel.valueOf(v.toUpperCase())).orElse(WasmDebugInfoLevel.DEOBFUSCATION));
-        wasmGC.getSourceMap().convention(property("wasm-gc.sourceMap").map(Boolean::parseBoolean).orElse(false));
+        wasmGC.getSourceMap().convention(property("wasm-gc.sourceMap").map(Boolean::parseBoolean).orElse(isDebug));
         wasmGC.getSourceFilePolicy().convention(property("wasm-gc.sourceFilePolicy")
                 .map(SourceFilePolicy::valueOf)
                 .orElse(SourceFilePolicy.LINK_LOCAL_FILES));
@@ -131,32 +113,45 @@ class TeaVMExtensionImpl extends TeaVMBaseExtensionImpl implements TeaVMExtensio
         wasmGC.getMaxDirectBuffersSize().convention(property("wasm-gc.maxDirectBuffersSize")
                 .map(Integer::parseInt)
                 .orElse(32));
-    }
+        wasmGC.getImportedWasmMemory().convention(property("wasm-gc.importedMemory")
+                .map(Boolean::parseBoolean)
+                .orElse(false));
+        wasmGC.getSharedBuffer().convention(property("wasm-gc.sharedBuffer")
+                .map(Boolean::parseBoolean)
+                .orElse(false));
 
-    private void setupWasiDefaults() {
-        wasi.getRelativePathInOutputDir().convention("wasi");
-        wasi.getMinHeapSize().convention(1);
-        wasi.getMaxHeapSize().convention(16);
-        wasi.getOptimization().convention(property("wasi.optimization").map(OptimizationLevel::valueOf)
-                .orElse(OptimizationLevel.AGGRESSIVE));
-        wasi.getTargetFileName().convention(project.provider(() -> project.getName() + ".wasm"));
-        wasi.getExceptionsUsed().convention(property("wasi.exceptionsUsed").map(Boolean::parseBoolean).orElse(false));
+        wasmGC.getEmscripten().getEnabled().convention(false);
+        wasmGC.getEmscripten().getCompilerArgs().convention(property("wasm-gc.emscripten.compilerArgs")
+                .map(c -> List.of(c.split(" ")))
+                .orElse(Collections.emptyList()));
+        wasmGC.getEmscripten().getExportedFunctions().convention(Collections.emptyList());
+
+        wasmGC.getDevServer().getAutoReload().convention(property("wasm-gc.devServer.autoReload")
+                .map(Boolean::parseBoolean));
+        wasmGC.getDevServer().getPort().convention(property("wasm-gc.devServer.port").map(Integer::parseInt));
+        wasmGC.getDevServer().getProxyUrl().convention(property("wasm-gc.devServer.proxy.url"));
+        wasmGC.getDevServer().getProxyPath().convention(property("wasm-gc.devServer.proxy.path"));
+        wasmGC.getDevServer().getProcessMemory().convention(property("wasm-gc.devServer.memory")
+                .map(Integer::parseInt));
     }
 
     private void setupCDefaults() {
+        var isDebug = property("debug").map(Boolean::parseBoolean).orElse(false);
         c.getRelativePathInOutputDir().convention("c");
         c.getMinHeapSize().convention(1);
         c.getMaxHeapSize().convention(16);
         c.getHeapDump().convention(property("c.heapDump").map(Boolean::parseBoolean).orElse(false));
         c.getShortFileNames().convention(property("c.shortFileName").map(Boolean::parseBoolean).orElse(true));
         c.getOptimization().convention(property("c.optimization").map(OptimizationLevel::valueOf)
-                .orElse(OptimizationLevel.AGGRESSIVE));
+                .orElse(isDebug.map(x -> x ? OptimizationLevel.NONE : OptimizationLevel.AGGRESSIVE)));
         c.getObfuscated().convention(true);
     }
 
     private void setupAllDefaults() {
+        var isDebug = property("debug").map(Boolean::parseBoolean).orElse(false);
         all.getOutputDir().convention(project.getLayout().getBuildDirectory().dir("generated/teavm"));
-        all.getDebugInformation().convention(property("debugInformation").map(Boolean::parseBoolean).orElse(false));
+        all.getDebugInformation().convention(property("debugInformation").map(Boolean::parseBoolean)
+                .orElse(isDebug));
         all.getOptimization().convention(OptimizationLevel.BALANCED);
         all.getFastGlobalAnalysis().convention(property("fastGlobalAnalysis").map(Boolean::parseBoolean).orElse(false));
         all.getOutOfProcess().convention(property("outOfProcess").map(Boolean::parseBoolean).orElse(false));
@@ -176,36 +171,6 @@ class TeaVMExtensionImpl extends TeaVMBaseExtensionImpl implements TeaVMExtensio
     @Override
     public void js(Closure<?> action) {
         action.rehydrate(getJs(), action.getOwner(), action.getThisObject()).call();
-    }
-
-    @Override
-    public TeaVMWasmConfiguration getWasm() {
-        return wasm;
-    }
-
-    @Override
-    public void wasm(Action<TeaVMWasmConfiguration> action) {
-        action.execute(getWasm());
-    }
-
-    @Override
-    public void wasm(Closure<?> action) {
-        action.rehydrate(getWasm(), action.getOwner(), action.getThisObject()).call();
-    }
-
-    @Override
-    public TeaVMWasiConfiguration getWasi() {
-        return wasi;
-    }
-
-    @Override
-    public void wasi(Action<TeaVMWasiConfiguration> action) {
-        action.execute(wasi);
-    }
-
-    @Override
-    public void wasi(Closure<?> action) {
-        action.rehydrate(getWasi(), action.getOwner(), action.getThisObject()).call();
     }
 
     @Override
@@ -258,34 +223,9 @@ class TeaVMExtensionImpl extends TeaVMBaseExtensionImpl implements TeaVMExtensio
         target.getOutputDir().convention(source.getOutputDir());
         target.getDebugInformation().convention(source.getDebugInformation());
         target.getFastGlobalAnalysis().convention(source.getFastGlobalAnalysis());
-        target.getOptimization().convention(source.getOptimization());
         target.getProperties().putAll(source.getProperties());
 
         target.getOutOfProcess().convention(source.getOutOfProcess());
         target.getProcessMemory().convention(source.getProcessMemory());
-    }
-
-    static abstract class JsConfigImpl implements TeaVMJSConfiguration {
-        private TeaVMDevServerConfiguration devServer;
-
-        @Inject
-        public JsConfigImpl(Project project) {
-            devServer = project.getObjects().newInstance(TeaVMDevServerConfiguration.class);
-        }
-
-        @Override
-        public void devServer(Action<TeaVMDevServerConfiguration> action) {
-            action.execute(devServer);
-        }
-
-        @Override
-        public TeaVMDevServerConfiguration getDevServer() {
-            return devServer;
-        }
-
-        @Override
-        public void devServer(Closure<?> action) {
-            action.rehydrate(getDevServer(), action.getOwner(), action.getThisObject()).call();
-        }
     }
 }

@@ -22,9 +22,11 @@ import org.teavm.cache.CacheStatus;
 import org.teavm.common.ServiceRepository;
 import org.teavm.dependency.DependencyInfo;
 import org.teavm.diagnostics.Diagnostics;
+import org.teavm.extension.ExtensionEnvironment;
 import org.teavm.model.ClassReaderSource;
 import org.teavm.model.MethodReference;
 import org.teavm.model.analysis.ClassInitializerInfo;
+import org.teavm.parsing.resource.ResourceProvider;
 
 public interface TeaVMTargetController {
     boolean wasCancelled();
@@ -32,6 +34,8 @@ public interface TeaVMTargetController {
     ClassLoader getClassLoader();
 
     ClassReaderSource getUnprocessedClassSource();
+
+    ResourceProvider getResourceProvider();
 
     CacheStatus getCacheStatus();
 
@@ -60,4 +64,6 @@ public interface TeaVMTargetController {
     void addVirtualMethods(Predicate<MethodReference> methods);
 
     ClassInitializerInfo getClassInitializerInfo();
+    
+    ExtensionEnvironment extensionEnvironment();
 }

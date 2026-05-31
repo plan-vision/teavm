@@ -43,7 +43,7 @@ class JSAliasRenderer implements RendererListener, MethodContributor {
     private JSTypeHelper typeHelper;
     private RenderingManager context;
     private int lastExportIndex;
-
+ 
     @Override
     public void begin(RenderingManager context, BuildTarget buildTarget) {
         writer = context.getWriter();
@@ -100,14 +100,18 @@ class JSAliasRenderer implements RendererListener, MethodContributor {
 
         writer.append("c").ws().append("=").ws().appendClass(classReader.getName()).append(".prototype;")
                 .softNewLine();
+
         JSAliasRendererCustomWrapper customImpl = JSAliasRendererCustomWrapper.get();
+        
         for (var aliasEntry : members.methods.entrySet()) {
 
-            if (classReader.getMethod(aliasEntry.getValue().getDescriptor()) == null) {
+        	if (classReader.getMethod(aliasEntry.getValue().getDescriptor()) == null) {
                 continue;
             }
             appendMethodAlias(aliasEntry.getKey());            
+
             // support for custom implementation wrapper 
+            
             String impl =  customImpl == null ? null : customImpl.generate(aliasEntry.getValue().getClassName()+"."+aliasEntry.getKey());
             if (impl == null) // default
             	writer.ws().append("=").ws().appendFunction("$rt_callWithReceiver").append("(")
@@ -116,6 +120,7 @@ class JSAliasRenderer implements RendererListener, MethodContributor {
             	writer.ws().append("=").ws().append(impl).append("(")
         		.appendMethod(aliasEntry.getValue()).append(");").softNewLine();
         }
+        
         for (var aliasEntry : members.properties.entrySet()) {
             var propInfo = aliasEntry.getValue();
             if (propInfo.getter == null || classReader.getMethod(propInfo.getter.getDescriptor()) == null) {

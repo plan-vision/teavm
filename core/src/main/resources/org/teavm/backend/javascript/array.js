@@ -75,7 +75,7 @@ let $rt_createDoubleArrayFromData = data => {
 }
 
 let $rt_arraycls = cls => {
-    let result = cls.$array;
+    let result = cls[$rt_meta].arrayType;
     if (result === null) {
         function JavaArray(data) {
             $rt_objcls().call(this);
@@ -107,24 +107,16 @@ let $rt_arraycls = cls => {
             }
             return new ($rt_arraycls(this.type))(dataCopy);
         };
-        let name = "[" + cls.$meta.binaryName;
-        JavaArray.$meta = {
-            item: cls,
-            supertypes: [$rt_objcls()],
-            primitive: false,
-            superclass: $rt_objcls(),
+        let name = "[" + cls[$rt_meta].binaryName;
+        JavaArray[$rt_meta] = $rt_newClassMetadata({
             name: name,
             binaryName: name,
-            enum: false,
-            simpleName: null,
-            declaringClass: null,
-            enclosingClass: null
-        };
-        JavaArray.classObject = null;
-        JavaArray.$array = null;
+            parent: $rt_objcls(),
+            itemType: cls
+        });
 
         result = JavaArray;
-        cls.$array = JavaArray;
+        cls[$rt_meta].arrayType = JavaArray;
     }
     return result;
 }
@@ -149,7 +141,7 @@ let $rt_createMultiArray = (cls, dimensions) => {
     for (let i = 0; i < arrays.length; i = (i + 1) | 0) {
         arrays[i] = $rt_createArray(cls, firstDim);
     }
-    return $rt_createMultiArrayImpl(cls, arrays, dimensions, first);
+    return $rt_createMultiArrayImpl(cls, arrays, dimensions, first, 0);
 }
 let $rt_createByteMultiArray = dimensions => {
     let arrays = new teavm_globals.Array($rt_primitiveArrayCount(dimensions, 0));
@@ -160,7 +152,7 @@ let $rt_createByteMultiArray = dimensions => {
     for (let i = 0; i < arrays.length; i = (i + 1) | 0) {
         arrays[i] = $rt_createByteArray(firstDim);
     }
-    return $rt_createMultiArrayImpl($rt_bytecls, arrays, dimensions);
+    return $rt_createMultiArrayImpl($rt_bytecls, arrays, dimensions, 0);
 }
 let $rt_createCharMultiArray = dimensions => {
     let arrays = new teavm_globals.Array($rt_primitiveArrayCount(dimensions, 0));
@@ -284,4 +276,13 @@ let $rt_concatArrays = (a, b) => {
         b = teavm_globals.Array.from(b);
     }
     return a.concat(b);
+}
+let $rt_arrayGet = (type, array, index) => {
+    return type[$rt_meta].itemType[$rt_meta].valueToObject(array.data[index]);
+}
+let $rt_arrayPut = (type, array, index, value) => {
+    array.data[index] = type[$rt_meta].itemType[$rt_meta].objectToValue(value);
+}
+function $rt_arrayLength(array) {
+    return array.data.length;
 }

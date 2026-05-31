@@ -16,6 +16,7 @@
 package org.teavm.vm;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
@@ -29,7 +30,9 @@ import org.junit.runner.RunWith;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
 import org.teavm.jso.JSBody;
+import org.teavm.jso.JSByRef;
 import org.teavm.junit.EachTestCompiledSeparately;
+import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTestRunner;
@@ -38,6 +41,17 @@ import org.teavm.junit.TestPlatform;
 @RunWith(TeaVMTestRunner.class)
 @EachTestCompiledSeparately
 public class VMTest {
+    @Test
+    @OnlyPlatform(TestPlatform.JAVASCRIPT)
+    @SkipJVM
+    public void typedArrayUsed() {
+        var multiarray = new byte[1][2];
+        assertTrue(isTypedArray(multiarray[0]));
+    }
+
+    @JSBody(params = "data", script = "return data instanceof Int8Array;")
+    private static native boolean isTypedArray(@JSByRef(optional = true) byte[] data);
+
     @Test
     public void multiArrayCreated() {
         int[][] array = new int[2][3];
@@ -133,6 +147,20 @@ public class VMTest {
             }
         }
         assertEquals(List.of("1", "2", "3"), list);
+    }
+
+    @Test
+    public void breakLoopFromCatch() {
+        var caught = false;
+        while (true) {
+            try {
+                "".charAt(-1);
+            } catch (IndexOutOfBoundsException e) {
+                caught = true;
+                break;
+            }
+        }
+        assertTrue(caught);
     }
 
     @Test
@@ -276,7 +304,7 @@ public class VMTest {
 
     @Test
     @SkipJVM
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
+    @SkipPlatform(TestPlatform.C)
     public void asyncClinit() {
         assertEquals(0, initCount);
         assertEquals("foo", AsyncClinitClass.foo());
@@ -288,13 +316,13 @@ public class VMTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
+    @SkipPlatform(TestPlatform.C)
     public void asyncClinitField() {
         assertEquals("ok", AsyncClinitClass.state);
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
+    @SkipPlatform(TestPlatform.C)
     public void asyncClinitInstance() {
         AsyncClinitClass acl = new AsyncClinitClass();
         assertEquals("ok", AsyncClinitClass.state);
@@ -302,7 +330,7 @@ public class VMTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
+    @SkipPlatform(TestPlatform.C)
     public void asyncWait() {
         AsyncClinitClass acl = new AsyncClinitClass();
         acl.doWait();
@@ -311,7 +339,7 @@ public class VMTest {
 
     @Test
     @SkipJVM
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
+    @SkipPlatform(TestPlatform.C)
     public void loopAndExceptionPhi() {
         int[] a = createArray();
         int s = 0;
@@ -330,7 +358,7 @@ public class VMTest {
 
     @Test
     @SkipJVM
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
+    @SkipPlatform(TestPlatform.C)
     public void asyncTryCatch() {
         try {
             throwExceptionAsync();
@@ -342,7 +370,7 @@ public class VMTest {
 
     @Test
     @SkipJVM
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
+    @SkipPlatform(TestPlatform.C)
     public void asyncExceptionHandler() {
         try {
             throw new RuntimeException("OK");
@@ -364,91 +392,10 @@ public class VMTest {
     }
 
     @Test
-    public void defaultMethodsSupported() {
-        WithDefaultMethod[] instances = { new WithDefaultMethodDerivedA(), new WithDefaultMethodDerivedB(),
-                new WithDefaultMethodDerivedC() };
-        StringBuilder sb = new StringBuilder();
-        for (WithDefaultMethod instance : instances) {
-            sb.append(instance.foo() + "," + instance.bar() + ";");
-        }
-
-        assertEquals("default,A;default,B;overridden,C;", sb.toString());
-    }
-
-    @Test
     public void clinitReadsState() {
         initCount = 23;
         assertEquals(23, ReadingStateInClinit.state);
     }
-
-    @Test
-    public void implementInBaseMethodWithDefault() {
-        SubclassWithInheritedImplementation o = new SubclassWithInheritedImplementation();
-        assertEquals(1, o.x);
-        assertEquals(2, new SubclassWithInheritedDefaultImplementation().foo());
-    }
-
-    static class BaseClassWithImplementation {
-        public int foo() {
-            return 1;
-        }
-    }
-
-    interface BaseInterfaceWithDefault {
-        default int foo() {
-            return 2;
-        }
-    }
-
-    static class IntermediateClassInheritingImplementation extends BaseClassWithImplementation {
-    }
-
-    static class SubclassWithInheritedImplementation extends IntermediateClassInheritingImplementation
-            implements BaseInterfaceWithDefault {
-        int x;
-
-        SubclassWithInheritedImplementation() {
-            x = foo();
-        }
-    }
-
-    static class SubclassWithInheritedDefaultImplementation implements BaseInterfaceWithDefault {
-    }
-
-    interface WithDefaultMethod {
-        default String foo() {
-            return "default";
-        }
-
-        String bar();
-    }
-
-    class WithDefaultMethodDerivedA implements WithDefaultMethod {
-        @Override
-        public String bar() {
-            return "A";
-        }
-    }
-
-    class WithDefaultMethodDerivedB implements WithDefaultMethod {
-        @Override
-        public String bar() {
-            return "B";
-        }
-    }
-    class WithDefaultMethodDerivedC implements WithDefaultMethod {
-        @Override
-        public String foo() {
-            return "overridden";
-        }
-
-        @Override
-        public String bar() {
-            return "C";
-        }
-    }
-
-
     @JSBody(script = "return [1, 2]")
     private static native int[] createArray();
 
@@ -548,49 +495,6 @@ public class VMTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
-    public void indirectDefaultMethod() {
-        StringBuilder sb = new StringBuilder();
-        for (FirstPath o : new FirstPath[] { new PathJoint(), new FirstPathOptimizationPrevention() }) {
-            sb.append(o.foo()).append(";");
-        }
-        assertEquals("SecondPath.foo;FirstPath.foo;", sb.toString());
-    }
-
-    @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
-    public void indirectDefaultMethodSubclass() {
-        StringBuilder sb = new StringBuilder();
-        for (FirstPath o : new FirstPath[] { new PathJointSubclass(), new FirstPathOptimizationPrevention() }) {
-            sb.append(o.foo()).append(";");
-        }
-        assertEquals("SecondPath.foo;FirstPath.foo;", sb.toString());
-    }
-
-    interface FirstPath {
-        default String foo() {
-            return "FirstPath.foo";
-        }
-    }
-
-    interface SecondPath extends FirstPath {
-        @Override
-        default String foo() {
-            return "SecondPath.foo";
-        }
-    }
-
-    class PathJoint implements FirstPath, SecondPath {
-    }
-
-    class PathJointSubclass extends PathJoint implements FirstPath {
-    }
-
-    class FirstPathOptimizationPrevention implements FirstPath {
-        // Used to ensure that the implementation of FirstPath.foo() is not optimized away by TeaVM.
-    }
-
-    @Test
     public void cloneArray() {
         String[] a = new String[] { "foo" };
         String[] b = a.clone();
@@ -633,7 +537,6 @@ public class VMTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
     public void arrayMonitor() throws InterruptedException {
         int[] array = { 1, 2, 3 };
         synchronized (array) {
@@ -669,52 +572,83 @@ public class VMTest {
         }
         return result;
     }
-
-    @Test
-    public void virtualCallWithPrivateMethods() {
-        assertEquals("ap", callA(new B()));
-    }
-
-    @Test
-    public void virtualTableCase1() {
-        interface I {
-            String f();
-        }
-        interface J extends I {
-            String g();
-        }
-        class A {
-        }
-        class C extends A implements J {
-            @Override
-            public String f() {
-                return "C.f";
-            }
-            @Override
-            public String g() {
-                return "C.g";
-            }
-        }
-        class D implements I {
-            @Override
-            public String f() {
-                return "D.f";
-            }
-        }
-        
-        var list = List.<I>of(new C(), new D());
-        var sb = new StringBuilder();
-        for (var item : list) {
-            sb.append(item.f()).append(";");
-        }
-        
-        assertEquals("C.f;D.f;", sb.toString());
-    }
-
+    
     @Test
     public void typeInferenceForArrayMerge() {
         int[][] a = falseBoolean() ? null : array();
         assertEquals(23, a[0][0]);
+    }
+
+    @Test
+    public void nanComparison() {
+        var d = Double.NaN;
+        assertFalse(d == 1);
+        assertFalse(d > 1);
+        assertFalse(d < 1);
+        assertTrue(d != 1);
+        assertFalse(d == Double.NaN);
+        assertFalse(d > Double.NaN);
+        assertFalse(d < Double.NaN);
+        assertTrue(d != Double.NaN);
+        
+        d = doubleNaN();
+        assertFalse(d == 1);
+        assertFalse(d > 1);
+        assertFalse(d < 1);
+        assertTrue(d != 1);
+        assertFalse(d == Double.NaN);
+        assertFalse(d > Double.NaN);
+        assertFalse(d < Double.NaN);
+        assertTrue(d != Double.NaN);
+
+        assertFalse(doubleNaN() == 1);
+        assertFalse(doubleNaN() > 1);
+        assertFalse(doubleNaN() < 1);
+        assertTrue(doubleNaN() != 1);
+        assertFalse(doubleNaN() == Double.NaN);
+        assertFalse(doubleNaN() > Double.NaN);
+        assertFalse(doubleNaN() < Double.NaN);
+        assertTrue(doubleNaN() != Double.NaN);
+    }
+    
+    @Test
+    public void nanComparisonFloat() {
+        var f = Float.NaN;
+        assertFalse(f == 1);
+        assertFalse(f > 1);
+        assertFalse(f < 1);
+        assertTrue(f != 1);
+        assertFalse(f == Float.NaN);
+        assertFalse(f > Float.NaN);
+        assertFalse(f < Float.NaN);
+        assertTrue(f != Float.NaN);
+
+        f = floatNaN();
+        assertFalse(f == 1);
+        assertFalse(f > 1);
+        assertFalse(f < 1);
+        assertTrue(f != 1);
+        assertFalse(f == Float.NaN);
+        assertFalse(f > Float.NaN);
+        assertFalse(f < Float.NaN);
+        assertTrue(f != Float.NaN);
+
+        assertFalse(floatNaN() == 1);
+        assertFalse(floatNaN() > 1);
+        assertFalse(floatNaN() < 1);
+        assertTrue(floatNaN() != 1);
+        assertFalse(floatNaN() == Float.NaN);
+        assertFalse(floatNaN() > Float.NaN);
+        assertFalse(floatNaN() < Float.NaN);
+        assertTrue(floatNaN() != Float.NaN);
+    }
+    
+    private double doubleNaN() {
+        return Double.NaN;
+    }
+
+    private float floatNaN() {
+        return Float.NaN;
     }
 
     private boolean falseBoolean() {
@@ -723,25 +657,5 @@ public class VMTest {
 
     private int[][] array() {
         return new int[][] { { 23 } };
-    }
-
-    private static String callA(A a) {
-        return a.a();
-    }
-
-    static class A {
-        String a() {
-            return "a" + p();
-        }
-
-        private String p() {
-            return "p";
-        }
-    }
-
-    static class B extends A {
-        private String p() {
-            return "q";
-        }
     }
 }

@@ -2,6 +2,10 @@ name: Build
 on:
   pull_request:
   push:
+    branches:
+      - master
+      - 'release-**'
+      - 'check-**'
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,26 +16,17 @@ jobs:
         platform:
         - c
         - js
-        - wasm
-        - wasi
         - wasm-gc
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-java@v3
       with:
-        java-version: 21
+        java-version: 25
         distribution: adopt
     - uses: actions/setup-node@v4
     - uses: gradle/gradle-build-action@v2
-    - if: ${{ matrix.platform == 'wasi' }}
-      uses: bytecodealliance/actions/wasmtime/setup@v1
-    - if: ${{ matrix.platform == 'wasi' }}
-      run: |
-        mkdir -p "$HOME/.wasmtime/bin/"
-        echo 'wasmtime "$@"'> "$HOME/.wasmtime/bin/wasmtime"
-        chmod +x "$HOME/.wasmtime/bin/wasmtime"
     - run: |
-        platforms=("c" "js" "wasm" "wasi" "wasm-gc")
+        platforms=("c" "js" "wasm-gc")
         args=()
         for v in "${platforms[@]}"
         do
@@ -47,7 +42,10 @@ jobs:
       if: failure()
       with:
         name: "test-reports-${{ matrix.platform }}"
-        path: "tests/build/reports/tests/test"
+        path: |
+          tests/build/reports/tests/test
+          tests/build/teavm-tests/browser-stderr-*.txt
+          tests/build/teavm-tests/browser-stdout-*.txt
   checkstyle:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -55,7 +53,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v3
         with:
-          java-version: 21
+          java-version: 25
           distribution: adopt
       - uses: gradle/gradle-build-action@v2
       - run: |

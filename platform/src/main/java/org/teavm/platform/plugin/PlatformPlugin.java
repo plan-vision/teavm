@@ -22,27 +22,19 @@ import org.teavm.backend.c.TeaVMCHost;
 import org.teavm.backend.c.intrinsic.Intrinsic;
 import org.teavm.backend.c.intrinsic.IntrinsicContext;
 import org.teavm.backend.javascript.TeaVMJavaScriptHost;
-import org.teavm.backend.wasm.TeaVMWasmHost;
-import org.teavm.backend.wasm.gc.TeaVMWasmGCHost;
-import org.teavm.backend.wasm.intrinsics.WasmIntrinsic;
-import org.teavm.backend.wasm.intrinsics.WasmIntrinsicManager;
-import org.teavm.backend.wasm.intrinsics.gc.WasmGCIntrinsic;
-import org.teavm.backend.wasm.model.expression.WasmExpression;
+import org.teavm.backend.wasm.TeaVMWasmGCHost;
 import org.teavm.interop.Async;
 import org.teavm.interop.PlatformMarker;
 import org.teavm.model.ClassReader;
 import org.teavm.model.MethodReader;
 import org.teavm.model.MethodReference;
 import org.teavm.platform.Platform;
-import org.teavm.platform.PlatformQueue;
 import org.teavm.platform.metadata.MetadataGenerator;
 import org.teavm.platform.metadata.Resource;
 import org.teavm.platform.metadata.ResourceArray;
-import org.teavm.platform.metadata.ResourceMap;
 import org.teavm.platform.plugin.wasmgc.ResourceCustomTypeMapper;
 import org.teavm.platform.plugin.wasmgc.ResourceDependencySupport;
 import org.teavm.platform.plugin.wasmgc.ResourceInterfaceToClassTransformer;
-import org.teavm.platform.plugin.wasmgc.ResourceMapEntry;
 import org.teavm.platform.plugin.wasmgc.ResourceMapHelper;
 import org.teavm.platform.plugin.wasmgc.WasmGCResourceArrayIntrinsic;
 import org.teavm.platform.plugin.wasmgc.WasmGCResourceMapHelperIntrinsic;
@@ -85,58 +77,24 @@ public class PlatformPlugin implements TeaVMPlugin, MetadataRegistration {
         }
 
         if (!isBootstrap()) {
-            var wasmHost = host.getExtension(TeaVMWasmHost.class);
-            if (wasmHost != null) {
-                installWasm(host, wasmHost);
-            }
-
             var cHost = host.getExtension(TeaVMCHost.class);
             if (cHost != null) {
                 installC(host, cHost);
             }
+        }
 
-            var wasmGCHost = host.getExtension(TeaVMWasmGCHost.class);
-            if (wasmGCHost != null) {
-                installWasmGC(host, wasmGCHost);
-            }
+        var wasmGCHost = host.getExtension(TeaVMWasmGCHost.class);
+        if (wasmGCHost != null) {
+            installWasmGC(host, wasmGCHost);
         }
 
         var isJs = host.getExtension(TeaVMJavaScriptHost.class) != null;
         host.add(new AsyncMethodProcessor(!isJs));
-        if (isJs) {
-            host.add(new NewInstanceDependencySupport());
+        if (!isBootstrap()) {
+            TeaVMPluginUtil.handleNatives(host, Platform.class);
         }
-        host.add(new ClassLookupDependencySupport());
-        host.add(new EnumDependencySupport());
-        host.add(new PlatformDependencyListener());
-
-        TeaVMPluginUtil.handleNatives(host, Platform.class);
-        TeaVMPluginUtil.handleNatives(host, PlatformQueue.class);
 
         host.registerService(MetadataRegistration.class, this);
-    }
-
-    private void installWasm(TeaVMHost host, TeaVMWasmHost wasmHost) {
-        host.add(metadataTransformer);
-        host.add(new StringAmplifierTransformer());
-        host.add(new ResourceLowLevelTransformer());
-        metadataGeneratorConsumers.add((constructor, method, generator) -> {
-            wasmHost.add(ctx -> new MetadataIntrinsic(ctx.getClassSource(), ctx.getClassLoader(),
-                    ctx.getServices(), ctx.getProperties(), constructor, method, generator));
-        });
-        wasmHost.add(ctx -> new ResourceReadIntrinsic(ctx.getClassSource(), ctx.getClassLoader()));
-
-        wasmHost.add(ctx -> new WasmIntrinsic() {
-            @Override
-            public boolean isApplicable(MethodReference methodReference) {
-                return methodReference.getClassName().equals(StringAmplifier.class.getName());
-            }
-
-            @Override
-            public WasmExpression apply(InvocationExpr invocation, WasmIntrinsicManager manager) {
-                return manager.generate(invocation.getArguments().get(0));
-            }
-        });
     }
 
     private void installC(TeaVMHost host, TeaVMCHost cHost) {
@@ -145,7 +103,7 @@ public class PlatformPlugin implements TeaVMPlugin, MetadataRegistration {
         host.add(new ResourceLowLevelTransformer());
         MetadataCIntrinsic metadataCIntrinsic = new MetadataCIntrinsic();
         cHost.addGenerator(ctx -> {
-            metadataCIntrinsic.init(ctx.getClassSource(), ctx.getClassLoader(),
+            metadataCIntrinsic.init(ctx.getClassSource(), ctx.getResourceProvider(), ctx.getClassLoader(),
                     ctx.getServices(), ctx.getProperties());
             return metadataCIntrinsic;
         });
@@ -165,12 +123,11 @@ public class PlatformPlugin implements TeaVMPlugin, MetadataRegistration {
     }
 
     private void installWasmGC(TeaVMHost host, TeaVMWasmGCHost wasmGCHost) {
-        WasmGCIntrinsic amplifierIntrinsic =
-                (invocation, context) -> context.generate(invocation.getArguments().get(0));
-        wasmGCHost.addIntrinsic(new MethodReference(StringAmplifier.class, "amplify", String.class, String.class),
-                amplifierIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(StringAmplifier.class, "amplifyArray",
-                        String[].class, String[].class), amplifierIntrinsic);
+        wasmGCHost.contributeToCodeGen((ctx, reg) -> {
+            reg.inlineIntrinsics().registerIntrinsic(StringAmplifier.class, (invocation, context, builder) -> {
+                context.generate(builder, invocation.getArguments().get(0));
+            });
+        });
 
         host.add(new ResourceInterfaceToClassTransformer());
         var dependencySupport = new ResourceDependencySupport();
@@ -181,19 +138,19 @@ public class PlatformPlugin implements TeaVMPlugin, MetadataRegistration {
                 context.classes(),
                 context.names()
         ));
-        wasmGCHost.addIntrinsicFactory(new WasmGCResourceMethodIntrinsicFactory());
-        var metadataIntrinsicFactory = new WasmGCResourceMetadataIntrinsicFactory(host.getProperties(), host);
-        wasmGCHost.addIntrinsicFactory(metadataIntrinsicFactory);
+        wasmGCHost.contributeToCodeGen(new WasmGCResourceMethodIntrinsicFactory());
+        var metadataIntrinsicFactory = new WasmGCResourceMetadataIntrinsicFactory(host);
+        wasmGCHost.contributeToCodeGen(metadataIntrinsicFactory);
 
-        var arrayIntrinsic = new WasmGCResourceArrayIntrinsic();
-        wasmGCHost.addIntrinsic(new MethodReference(ResourceArray.class, "size", int.class), arrayIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(ResourceArray.class, "get", int.class, Resource.class),
-                arrayIntrinsic);
-        var mapHelperIntrinsic = new WasmGCResourceMapHelperIntrinsic();
-        wasmGCHost.addIntrinsic(new MethodReference(ResourceMapHelper.class, "entryCount", ResourceMap.class,
-                int.class), mapHelperIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(ResourceMapHelper.class, "entry", ResourceMap.class, int.class,
-                ResourceMapEntry.class), mapHelperIntrinsic);
+        wasmGCHost.contributeToCodeGen((ctx, reg) -> {
+            var arrayIntrinsic = new WasmGCResourceArrayIntrinsic(ctx.typeMapper());
+            reg.inlineIntrinsics().registerIntrinsic(new MethodReference(ResourceArray.class, "size", int.class),
+                    arrayIntrinsic);
+            reg.inlineIntrinsics().registerIntrinsic(new MethodReference(ResourceArray.class, "get", int.class,
+                    Resource.class), arrayIntrinsic);
+            reg.inlineIntrinsics().registerIntrinsic(ResourceMapHelper.class,
+                    new WasmGCResourceMapHelperIntrinsic(ctx.typeMapper()));
+        });
 
         metadataGeneratorConsumers.add((constructor, target, generator) -> {
             dependencySupport.addMetadataMethod(target);

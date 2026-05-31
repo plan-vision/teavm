@@ -18,6 +18,7 @@ package org.teavm.classlib.java.lang;
 import static org.teavm.classlib.impl.IntegerUtil.toUnsignedLogRadixString;
 import java.util.Objects;
 import org.teavm.backend.javascript.spi.GeneratedBy;
+import org.teavm.interop.Intrinsified;
 import org.teavm.interop.NoSideEffects;
 
 public class TLong extends TNumber implements TComparable<TLong> {
@@ -203,6 +204,39 @@ public class TLong extends TNumber implements TComparable<TLong> {
         return new TStringBuilder().insert(0, i, radix).toString();
     }
 
+    public static String toUnsignedString(long value, int radix) {
+        radix = Math.min(TCharacter.MAX_RADIX, Math.max(radix, TCharacter.MIN_RADIX));
+        int sz = 0;
+        var v = value;
+        while (v != 0L) {
+            v = Long.divideUnsigned(v, radix);
+            ++sz;
+        }
+        sz = Math.max(sz, 1);
+        var chars = new char[sz];
+        while (sz > 0) {
+            chars[--sz] = TCharacter.forDigit((int) Long.remainderUnsigned(value, radix), radix);
+            value = Long.divideUnsigned(value, radix);
+        }
+        return (String) (Object) TString.fromArray(chars);
+    }
+
+    public static String toUnsignedString(long value) {
+        int sz = 0;
+        var v = value;
+        while (v != 0L) {
+            v = Long.divideUnsigned(v, 10);
+            ++sz;
+        }
+        sz = Math.max(sz, 1);
+        var chars = new char[sz];
+        while (sz > 0) {
+            chars[--sz] = TCharacter.forDigit((int) Long.remainderUnsigned(value, 10), 10);
+            value = Long.divideUnsigned(value, 10);
+        }
+        return (String) (Object) TString.fromArray(chars);
+    }
+
     public static String toHexString(long i) {
         return toUnsignedLogRadixString(i, 4);
     }
@@ -381,13 +415,28 @@ public class TLong extends TNumber implements TComparable<TLong> {
 
     @GeneratedBy(LongNativeGenerator.class)
     @NoSideEffects
+    @Intrinsified
     public static native long divideUnsigned(long dividend, long divisor);
 
     @GeneratedBy(LongNativeGenerator.class)
     @NoSideEffects
+    @Intrinsified
     public static native long remainderUnsigned(long dividend, long divisor);
 
     @GeneratedBy(LongNativeGenerator.class)
     @NoSideEffects
+    @Intrinsified
     public static native int compareUnsigned(long a, long b);
+    
+    public static long min(long a, long b) {
+        return TMath.min(a, b);
+    }
+
+    public static long max(long a, long b) {
+        return TMath.max(a, b);
+    }
+    
+    public static long sum(long a, long b) {
+        return a + b;
+    }
 }

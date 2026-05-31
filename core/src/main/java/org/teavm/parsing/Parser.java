@@ -86,7 +86,9 @@ public class Parser {
             ProgramParser programParser = new ProgramParser(referenceCache);
             programParser.setFileName(fileName);
             Program program = programParser.parse(node);
-            new UnreachableBasicBlockEliminator().optimize(program);
+            var optimizer = new UnreachableBasicBlockEliminator();
+            optimizer.removeUnreachableInstructions(program);
+            optimizer.optimize(program);
 
             Graph cfg = ProgramUtils.buildControlFlowGraph(program);
             if (GraphUtils.isIrreducible(cfg)) {
@@ -125,6 +127,13 @@ public class Parser {
             parseAnnotations(method.parameterAnnotation(i),
                     node.visibleParameterAnnotations != null ? node.visibleParameterAnnotations[i] : null,
                     node.invisibleParameterAnnotations != null ? node.invisibleParameterAnnotations[i] : null);
+        }
+        if (node.exceptions != null && !node.exceptions.isEmpty()) {
+            var thrownTypes = new ArrayList<String>();
+            for (var type : node.exceptions) {
+                thrownTypes.add(type.replace('/', '.'));
+            }
+            method.setThrownTypes(thrownTypes);
         }
 
         if (node.signature != null) {
@@ -338,7 +347,9 @@ public class Parser {
                         cls.setOwnerName(cls.getDeclaringClassName());
                     }
                     cls.setSimpleName(innerClassNode.innerName);
-                    break;
+                }
+                if (node.name.equals(innerClassNode.outerName)) {
+                    cls.getInnerClasses().add(referenceCache.getCached(innerClassNode.name.replace('/', '.')));
                 }
             }
             for (var innerClassNode : node.innerClasses) {

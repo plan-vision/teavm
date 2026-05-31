@@ -81,7 +81,7 @@ class UsageGenerator {
         if (model.getClassParameterIndex() >= 0) {
             int index = 1 + model.getClassParameterIndex();
             methodDep.getVariable(index).getClassValueNode().addConsumer(
-                    type -> emitPermutation(findClass(type.getName())));
+                    type -> emitPermutation(type.getValueType()));
         } else {
             emitPermutation(null);
         }
@@ -90,7 +90,7 @@ class UsageGenerator {
     private MethodDependency installAdditionalDependencies() {
         MethodDependency nameDep = agent.linkMethod(new MethodReference(Class.class, "getName", String.class));
         nameDep.addLocation(location);
-        nameDep.getVariable(0).propagate(agent.getType(Class.class.getName()));
+        nameDep.getVariable(0).propagate(agent.getType(ValueType.object(Class.class.getName())));
         nameDep.getThrown().connect(methodDep.getThrown());
         nameDep.use();
 
@@ -98,13 +98,13 @@ class UsageGenerator {
                 boolean.class));
         equalsDep.addLocation(location);
         nameDep.getResult().connect(equalsDep.getVariable(0));
-        equalsDep.getVariable(1).propagate(agent.getType("java.lang.String"));
+        equalsDep.getVariable(1).propagate(agent.getType(ValueType.object("java.lang.String")));
         equalsDep.getThrown().connect(methodDep.getThrown());
         equalsDep.use();
 
         MethodDependency hashCodeDep = agent.linkMethod(new MethodReference(String.class, "hashCode", int.class));
         hashCodeDep.addLocation(location);
-        hashCodeDep.getVariable(0).propagate(agent.getType("java.lang.String"));
+        hashCodeDep.getVariable(0).propagate(agent.getType(ValueType.object("java.lang.String")));
         nameDep.getResult().connect(hashCodeDep.getVariable(0));
         hashCodeDep.getThrown().connect(methodDep.getThrown());
         hashCodeDep.use();
@@ -146,7 +146,9 @@ class UsageGenerator {
         Object[] proxyArgs = new Object[model.getMetaParameterCount()];
         for (int i = 0; i < proxyArgs.length; ++i) {
             if (i == model.getMetaClassParameterIndex()) {
-                proxyArgs[i] = MetaprogrammingImpl.findClass(type);
+                proxyArgs[i] = model.isClassParamIntrospect()
+                    ? MetaprogrammingImpl.environment.underlyingEnv.introspection().getClass(type)
+                    : MetaprogrammingImpl.findClass(type);
             } else {
                 proxyArgs[i] = new ValueImpl<>(getParameterVar(i), MetaprogrammingImpl.varContext,
                         model.getMetaParameterType(i));
@@ -161,7 +163,7 @@ class UsageGenerator {
         } catch (IllegalAccessException | InvocationTargetException e) {
             StringWriter writer = new StringWriter();
             e.printStackTrace(new PrintWriter(writer));
-            diagnostics.error(location, "Error calling proxy method {{m0}}: " + writer.toString(),
+            diagnostics.error(location, "Error calling proxy method {{m0}}: " + writer,
                     model.getMetaMethod());
             MetaprogrammingImpl.error = true;
         }
@@ -206,29 +208,6 @@ class UsageGenerator {
         implMethod.use();
 
         agent.linkClass(implRef.getClassName());
-    }
-
-    private ValueType findClass(String name) {
-        // TODO: dirty hack due to bugs somewhere in TeaVM
-        if (name.startsWith("[")) {
-            ValueType type = ValueType.parseIfPossible(name);
-            if (type != null) {
-                return type;
-            }
-
-            int degree = 0;
-            while (name.charAt(degree) == '[') {
-                ++degree;
-            }
-            type = ValueType.object(name.substring(degree));
-
-            while (degree-- > 0) {
-                type = ValueType.arrayOf(type);
-            }
-            return type;
-        } else {
-            return ValueType.object(name);
-        }
     }
 
     private MethodReference buildMethodReference(String suffix) {
@@ -294,9 +273,12 @@ class UsageGenerator {
     }
 
     private Variable getParameterVar(int index) {
+        return getParameterVar(index, model.getMethod().parameterType(index));
+    }
+
+    static Variable getParameterVar(int index, ValueType type) {
         Program program = MetaprogrammingImpl.generator.getProgram();
         Variable var = program.variableAt(index + 1);
-        ValueType type = model.getMethod().parameterType(index);
         if (type instanceof ValueType.Primitive) {
             switch (((ValueType.Primitive) type).getKind()) {
                 case BOOLEAN:
@@ -328,7 +310,7 @@ class UsageGenerator {
         return var;
     }
 
-    private Variable box(Variable var, Class<?> boxed, Class<?> primitive) {
+    private static Variable box(Variable var, Class<?> boxed, Class<?> primitive) {
         Program program = MetaprogrammingImpl.generator.getProgram();
         BasicBlock block = program.basicBlockAt(0);
 

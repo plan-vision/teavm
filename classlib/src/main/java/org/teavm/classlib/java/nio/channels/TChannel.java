@@ -21,5 +21,6 @@ import org.teavm.classlib.java.io.TCloseable;
 public interface TChannel extends TCloseable {
     boolean isOpen();
 
+    @Override
     void close() throws IOException;
 }

@@ -28,8 +28,6 @@ public class MutatorIntrinsic implements Intrinsic {
 
         switch (method.getName()) {
             case "getStaticGCRoots":
-            case "getClasses":
-            case "getClassCount":
                 return true;
             default:
                 return false;
@@ -41,12 +39,6 @@ public class MutatorIntrinsic implements Intrinsic {
         switch (invocation.getMethod().getName()) {
             case "getStaticGCRoots":
                 context.writer().print("teavm_gc_staticRoots");
-                break;
-            case "getClasses":
-                context.writer().print("teavm_classReferences");
-                break;
-            case "getClassCount":
-                context.writer().print("teavm_classReferencesCount");
                 break;
         }
     }

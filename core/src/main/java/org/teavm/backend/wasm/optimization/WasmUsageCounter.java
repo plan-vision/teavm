@@ -18,6 +18,7 @@ package org.teavm.backend.wasm.optimization;
 import com.carrotsearch.hppc.ObjectIntHashMap;
 import com.carrotsearch.hppc.ObjectIntMap;
 import org.teavm.backend.wasm.model.WasmArray;
+import org.teavm.backend.wasm.model.WasmBlockType;
 import org.teavm.backend.wasm.model.WasmCompositeType;
 import org.teavm.backend.wasm.model.WasmCompositeTypeVisitor;
 import org.teavm.backend.wasm.model.WasmFunction;
@@ -26,28 +27,29 @@ import org.teavm.backend.wasm.model.WasmGlobal;
 import org.teavm.backend.wasm.model.WasmModule;
 import org.teavm.backend.wasm.model.WasmStructure;
 import org.teavm.backend.wasm.model.WasmType;
-import org.teavm.backend.wasm.model.expression.WasmArrayCopy;
-import org.teavm.backend.wasm.model.expression.WasmArrayGet;
-import org.teavm.backend.wasm.model.expression.WasmArrayNewDefault;
-import org.teavm.backend.wasm.model.expression.WasmArrayNewFixed;
-import org.teavm.backend.wasm.model.expression.WasmArraySet;
-import org.teavm.backend.wasm.model.expression.WasmBlock;
-import org.teavm.backend.wasm.model.expression.WasmCall;
-import org.teavm.backend.wasm.model.expression.WasmCallReference;
-import org.teavm.backend.wasm.model.expression.WasmCast;
-import org.teavm.backend.wasm.model.expression.WasmCastBranch;
-import org.teavm.backend.wasm.model.expression.WasmDefaultExpressionVisitor;
-import org.teavm.backend.wasm.model.expression.WasmFunctionReference;
-import org.teavm.backend.wasm.model.expression.WasmGetGlobal;
-import org.teavm.backend.wasm.model.expression.WasmIndirectCall;
-import org.teavm.backend.wasm.model.expression.WasmSetGlobal;
-import org.teavm.backend.wasm.model.expression.WasmStructGet;
-import org.teavm.backend.wasm.model.expression.WasmStructNew;
-import org.teavm.backend.wasm.model.expression.WasmStructNewDefault;
-import org.teavm.backend.wasm.model.expression.WasmStructSet;
-import org.teavm.backend.wasm.model.expression.WasmTest;
+import org.teavm.backend.wasm.model.instruction.WasmArrayCopy;
+import org.teavm.backend.wasm.model.instruction.WasmArrayGet;
+import org.teavm.backend.wasm.model.instruction.WasmArrayNewDefault;
+import org.teavm.backend.wasm.model.instruction.WasmArrayNewFixed;
+import org.teavm.backend.wasm.model.instruction.WasmArraySet;
+import org.teavm.backend.wasm.model.instruction.WasmBlock;
+import org.teavm.backend.wasm.model.instruction.WasmCall;
+import org.teavm.backend.wasm.model.instruction.WasmCallReference;
+import org.teavm.backend.wasm.model.instruction.WasmCast;
+import org.teavm.backend.wasm.model.instruction.WasmCastBranch;
+import org.teavm.backend.wasm.model.instruction.WasmDefaultInstructionVisitor;
+import org.teavm.backend.wasm.model.instruction.WasmFunctionReference;
+import org.teavm.backend.wasm.model.instruction.WasmGetGlobal;
+import org.teavm.backend.wasm.model.instruction.WasmIndirectCall;
+import org.teavm.backend.wasm.model.instruction.WasmSetGlobal;
+import org.teavm.backend.wasm.model.instruction.WasmStructGet;
+import org.teavm.backend.wasm.model.instruction.WasmStructNew;
+import org.teavm.backend.wasm.model.instruction.WasmStructNewDefault;
+import org.teavm.backend.wasm.model.instruction.WasmStructSet;
+import org.teavm.backend.wasm.model.instruction.WasmTest;
+import org.teavm.backend.wasm.model.instruction.WasmTry;
 
-public class WasmUsageCounter extends WasmDefaultExpressionVisitor implements WasmCompositeTypeVisitor {
+public class WasmUsageCounter extends WasmDefaultInstructionVisitor implements WasmCompositeTypeVisitor {
     private ObjectIntMap<WasmFunction> usagesByFunction = new ObjectIntHashMap<>();
     private ObjectIntMap<WasmGlobal> usagesByGlobals = new ObjectIntHashMap<>();
     private ObjectIntMap<WasmCompositeType> usagesByTypes = new ObjectIntHashMap<>();
@@ -63,7 +65,7 @@ public class WasmUsageCounter extends WasmDefaultExpressionVisitor implements Wa
             addUsage(function.getType());
         }
         for (var global : module.globals) {
-            global.getInitialValue().acceptVisitor(this);
+            visitMany(global.getInitialValue());
             addUsage(global.getType());
         }
     }
@@ -94,126 +96,127 @@ public class WasmUsageCounter extends WasmDefaultExpressionVisitor implements Wa
 
     @Override
     public void visit(WasmFunctionType type) {
-        addUsage(type.getReturnType());
+        for (var ret : type.getReturnTypes()) {
+            addUsage(ret);
+        }
         for (var param : type.getParameterTypes()) {
             addUsage(param);
         }
     }
 
     @Override
-    public void visit(WasmCall expression) {
-        super.visit(expression);
-        addUsage(expression.getFunction());
+    public void visit(WasmCall instruction) {
+        addUsage(instruction.getFunction());
     }
 
     @Override
-    public void visit(WasmFunctionReference expression) {
-        super.visit(expression);
-        addUsage(expression.getFunction());
+    public void visit(WasmFunctionReference instruction) {
+        addUsage(instruction.getFunction());
     }
 
     @Override
-    public void visit(WasmGetGlobal expression) {
-        super.visit(expression);
-        addUsage(expression.getGlobal());
+    public void visit(WasmGetGlobal instruction) {
+        addUsage(instruction.getGlobal());
     }
 
     @Override
-    public void visit(WasmSetGlobal expression) {
-        super.visit(expression);
-        addUsage(expression.getGlobal());
+    public void visit(WasmSetGlobal instruction) {
+        addUsage(instruction.getGlobal());
     }
 
     @Override
-    public void visit(WasmBlock expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmBlock instruction) {
+        super.visit(instruction);
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmCastBranch expression) {
-        super.visit(expression);
-        addUsage(expression.getSourceType());
-        addUsage(expression.getType());
+    public void visit(WasmTry instruction) {
+        super.visit(instruction);
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmCallReference expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmCastBranch instruction) {
+        addUsage(instruction.getSourceType());
+        addUsage(instruction.getTargetType());
     }
 
     @Override
-    public void visit(WasmIndirectCall expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmCallReference instruction) {
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmCast expression) {
-        super.visit(expression);
-        addUsage(expression.getTargetType());
+    public void visit(WasmIndirectCall instruction) {
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmTest expression) {
-        super.visit(expression);
-        addUsage(expression.getTestType());
+    public void visit(WasmCast instruction) {
+        addUsage(instruction.getTargetType());
     }
 
     @Override
-    public void visit(WasmStructNew expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmTest instruction) {
+        addUsage(instruction.getTestType());
     }
 
     @Override
-    public void visit(WasmStructNewDefault expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmStructNew instruction) {
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmStructGet expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmStructNewDefault instruction) {
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmStructSet expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmStructGet instruction) {
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmArrayNewDefault expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmStructSet instruction) {
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmArrayNewFixed expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmArrayNewDefault instruction) {
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmArrayGet expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmArrayNewFixed instruction) {
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmArraySet expression) {
-        super.visit(expression);
-        addUsage(expression.getType());
+    public void visit(WasmArrayGet instruction) {
+        addUsage(instruction.getType());
     }
 
     @Override
-    public void visit(WasmArrayCopy expression) {
-        super.visit(expression);
-        addUsage(expression.getSourceArrayType());
-        addUsage(expression.getTargetArrayType());
+    public void visit(WasmArraySet instruction) {
+        addUsage(instruction.getType());
+    }
+
+    @Override
+    public void visit(WasmArrayCopy instruction) {
+        addUsage(instruction.getSourceArrayType());
+        addUsage(instruction.getTargetArrayType());
+    }
+
+    private void addUsage(WasmBlockType type) {
+        if (type == null) {
+            return;
+        }
+        if (type instanceof WasmBlockType.Function) {
+            addUsage(((WasmBlockType.Function) type).ref);
+        } else {
+            addUsage(((WasmBlockType.Value) type).type);
+        }
     }
 
     private void addUsage(WasmType type) {

@@ -16,15 +16,28 @@
 package org.teavm.metaprogramming.impl;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import org.teavm.cache.IncrementalDependencyRegistration;
 import org.teavm.dependency.DependencyAgent;
+import org.teavm.extension.introspect.IntrospectClass;
+import org.teavm.extension.introspect.IntrospectClassImpl;
+import org.teavm.extension.introspect.IntrospectField;
+import org.teavm.extension.introspect.IntrospectFieldImpl;
+import org.teavm.extension.introspect.IntrospectMethod;
+import org.teavm.extension.introspect.IntrospectMethodImpl;
 import org.teavm.metaprogramming.Action;
+import org.teavm.metaprogramming.ClassHandle;
 import org.teavm.metaprogramming.Computation;
 import org.teavm.metaprogramming.Diagnostics;
+import org.teavm.metaprogramming.FieldAccessor;
 import org.teavm.metaprogramming.InvocationHandler;
 import org.teavm.metaprogramming.LazyComputation;
+import org.teavm.metaprogramming.MetaprogrammingEnvironment;
+import org.teavm.metaprogramming.MethodCaller;
+import org.teavm.metaprogramming.ProxyHandler;
 import org.teavm.metaprogramming.ReflectClass;
+import org.teavm.metaprogramming.Resource;
 import org.teavm.metaprogramming.SourceLocation;
 import org.teavm.metaprogramming.Value;
 import org.teavm.metaprogramming.impl.optimization.Optimizations;
@@ -58,15 +71,18 @@ import org.teavm.model.instructions.JumpInstruction;
 import org.teavm.model.instructions.LongConstantInstruction;
 import org.teavm.model.instructions.NullConstantInstruction;
 import org.teavm.model.util.TransitionExtractor;
+import org.teavm.parsing.resource.ResourceProvider;
 
 public final class MetaprogrammingImpl {
     static String suffix;
     static Map<String, Integer> proxySuffixGenerators = new HashMap<>();
     static ClassLoader classLoader;
     static ClassReaderSource classSource;
+    static ResourceProvider resourceProvider;
     static ClassHierarchy hierarchy;
     static IncrementalDependencyRegistration incrementalDependencies;
     static ReflectContext reflectContext;
+    static MetaprogrammingEnvironmentImpl environment;
     static DependencyAgent agent;
     static VariableContext varContext;
     static MethodReference templateMethod;
@@ -189,6 +205,7 @@ public final class MetaprogrammingImpl {
         generator.forcedLocation = null;
     }
 
+    @Deprecated
     public static SourceLocation getLocation() {
         TextLocation location = generator.forcedLocation;
         if (location == null) {
@@ -211,46 +228,80 @@ public final class MetaprogrammingImpl {
         return new SourceLocation(method, location.getFileName(), location.getLine());
     }
 
+    public static org.teavm.extension.diagnostics.SourceLocation currentLocation() {
+        TextLocation location = generator.forcedLocation;
+        if (location == null) {
+            location = generator.location;
+        }
+        if (location == null) {
+            return null;
+        }
+
+        var cls = environment.underlyingEnv.findClass(templateMethod.getClassName());
+        if (cls == null) {
+            return null;
+        }
+        cls.resolve();
+        var methodReader = cls.classReader.getMethod(templateMethod.getDescriptor());
+        if (methodReader == null) {
+            return null;
+        }
+        var method = cls.declaredMethod(methodReader.getDescriptor());
+        return new org.teavm.extension.diagnostics.SourceLocation(method, location.getFileName(), location.getLine());
+    }
+
+    public static MetaprogrammingEnvironment environment() {
+        return environment;
+    }
+
     @SuppressWarnings("WeakerAccess")
+    @Deprecated
     public static ReflectClass<?> findClass(String name) {
         return reflectContext.findClass(name);
     }
 
     @SuppressWarnings("WeakerAccess")
+    @Deprecated
     public static <T> ReflectClass<T> findClass(Class<T> cls) {
         return reflectContext.findClass(cls);
     }
 
+    @Deprecated
     static ReflectClass<?> findClass(ValueType type) {
         return reflectContext.getClass(type);
     }
 
+    @Deprecated
     public static ClassLoader getClassLoader() {
         return classLoader;
     }
 
     @SuppressWarnings("unchecked")
+    @Deprecated
     public static <T> ReflectClass<T[]> arrayClass(ReflectClass<T> componentType) {
         ReflectClassImpl<T> componentTypeImpl = (ReflectClassImpl<T>) componentType;
         return (ReflectClassImpl<T[]>) reflectContext.getClass(ValueType.arrayOf(componentTypeImpl.type));
     }
 
+    @Deprecated
     public static ReflectClass<?> createClass(byte[] bytecode) {
         return findClass(agent.submitClassFile(bytecode).replace('/', '.'));
     }
 
+    @Deprecated
     public static <T> Value<T> proxy(Class<T> type, InvocationHandler<T> handler)  {
         return proxy(findClass(type), handler);
     }
 
     @SuppressWarnings("WeakerAccess")
+    @Deprecated
     public static <T> Value<T> proxy(ReflectClass<T> type, InvocationHandler<T> handler) {
         ValueType innerType = ((ReflectClassImpl<?>) type).type;
         ClassHolder cls = new ClassHolder(createProxyName(type.getName()));
         cls.setLevel(AccessLevel.PUBLIC);
 
         String typeName = ((ValueType.Object) innerType).getClassName();
-        org.teavm.model.ClassReader typeReader = classSource.get(typeName);
+        var typeReader = classSource.get(typeName);
         if (typeReader.hasModifier(ElementModifier.INTERFACE)) {
             cls.setParent("java.lang.Object");
             cls.getInterfaces().add(typeName);
@@ -259,8 +310,90 @@ public final class MetaprogrammingImpl {
         }
 
         ProxyVariableContext nestedVarContext = new ProxyVariableContext(varContext, cls);
-        for (ReflectMethod method : type.getMethods()) {
-            ReflectMethodImpl methodImpl = (ReflectMethodImpl) method;
+        for (var method : type.getMethods()) {
+            var methodImpl = (ReflectMethodImpl) method;
+            if (methodImpl.method.getProgram() != null && methodImpl.method.getProgram().basicBlockCount() > 0
+                    || methodImpl.method.hasModifier(ElementModifier.NATIVE)
+                    || !methodImpl.method.hasModifier(ElementModifier.ABSTRACT)) {
+                continue;
+            }
+
+            MethodHolder methodHolder = new MethodHolder(methodImpl.method.getDescriptor());
+            methodHolder.setLevel(AccessLevel.PUBLIC);
+
+            ValueType returnTypeBackup = returnType;
+            VariableContext varContextBackup = varContext;
+            CompositeMethodGenerator generatorBackup = generator;
+            try {
+                returnType = methodHolder.getResultType();
+                varContext = nestedVarContext;
+                generator = new CompositeMethodGenerator(varContext, new Program());
+                generator.forcedLocation = generatorBackup.forcedLocation;
+
+                Program program = generator.program;
+                program.createBasicBlock();
+                generator.blockIndex = 0;
+                BasicBlock startBlock = generator.currentBlock();
+                nestedVarContext.init(startBlock);
+
+                methodHolder.setProgram(program);
+                Variable thisVar = program.createVariable();
+                int argumentCount = methodImpl.method.parameterCount();
+                @SuppressWarnings("unchecked")
+                ValueImpl<Object>[] arguments = (ValueImpl<Object>[]) new ValueImpl<?>[argumentCount];
+                for (int i = 0; i < arguments.length; ++i) {
+                    arguments[i] = new ValueImpl<>(program.createVariable(), nestedVarContext,
+                            methodImpl.method.parameterType(i));
+                }
+                for (int i = 0; i < arguments.length; ++i) {
+                    ValueType argType = methodImpl.method.parameterType(i);
+                    Variable var = generator.box(arguments[i].innerValue, argType);
+                    arguments[i] = new ValueImpl<>(var, nestedVarContext, argType);
+                }
+
+                generator.program.createBasicBlock();
+                generator.blockIndex = 1;
+                handler.invoke(new ValueImpl<>(thisVar, nestedVarContext, innerType), methodImpl, arguments);
+                close();
+
+                JumpInstruction jumpToStart = new JumpInstruction();
+                jumpToStart.setTarget(program.basicBlockAt(startBlock.getIndex() + 1));
+                startBlock.add(jumpToStart);
+
+                new Optimizations().apply(program, new MethodReference(cls.getName(), methodHolder.getDescriptor()));
+                cls.addMethod(methodHolder);
+            } finally {
+                returnType = returnTypeBackup;
+                varContext = varContextBackup;
+                generator = generatorBackup;
+            }
+        }
+
+        ValueImpl<T> result = new ValueImpl<>(nestedVarContext.createInstance(generator), varContext, innerType);
+
+        incrementalDependencies.setNoCache(cls.getName());
+        agent.submitClass(cls);
+        return result;
+    }
+
+    @SuppressWarnings("WeakerAccess")
+    public static <T> Value<T> proxy(IntrospectClass<T> type, ProxyHandler<T> handler) {
+        ValueType innerType = ((IntrospectClassImpl<?>) type).type;
+        ClassHolder cls = new ClassHolder(createProxyName(type.name()));
+        cls.setLevel(AccessLevel.PUBLIC);
+
+        String typeName = ((ValueType.Object) innerType).getClassName();
+        var typeReader = classSource.get(typeName);
+        if (typeReader.hasModifier(ElementModifier.INTERFACE)) {
+            cls.setParent("java.lang.Object");
+            cls.getInterfaces().add(typeName);
+        } else {
+            cls.setParent(typeName);
+        }
+
+        ProxyVariableContext nestedVarContext = new ProxyVariableContext(varContext, cls);
+        for (var method : type.methods()) {
+            var methodImpl = (IntrospectMethodImpl) method;
             if (methodImpl.method.getProgram() != null && methodImpl.method.getProgram().basicBlockCount() > 0
                     || methodImpl.method.hasModifier(ElementModifier.NATIVE)
                     || !methodImpl.method.hasModifier(ElementModifier.ABSTRACT)) {
@@ -337,6 +470,7 @@ public final class MetaprogrammingImpl {
         generator.add(insn);
     }
 
+    @Deprecated
     public static Diagnostics getDiagnostics() {
         return diagnostics;
     }
@@ -454,5 +588,34 @@ public final class MetaprogrammingImpl {
                 agent.getDiagnostics().warning(location, error, params);
             }
         };
+    }
+
+    @Deprecated
+    public static Iterator<Resource> getResources(String name) {
+        var underlyingResources = resourceProvider.getResources(name);
+        return new Iterator<>() {
+            @Override
+            public boolean hasNext() {
+                return underlyingResources.hasNext();
+            }
+
+            @Override
+            public Resource next() {
+                var resource = underlyingResources.next();
+                return resource::open;
+            }
+        };
+    }
+
+    public static MethodCaller caller(IntrospectMethod method) {
+        return new MethodCallerImpl((IntrospectMethodImpl) method);
+    }
+
+    public static FieldAccessor accessor(IntrospectField field) {
+        return new FieldAccessorImpl((IntrospectFieldImpl) field);
+    }
+
+    public static <T> ClassHandle<T> handle(IntrospectClass<T> cls) {
+        return new ClassHandleImpl<>((IntrospectClassImpl<T>) cls);
     }
 }

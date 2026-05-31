@@ -15,32 +15,31 @@
  */
 package org.teavm.classlib.java.lang.reflect;
 
-import org.teavm.classlib.impl.reflection.FieldReader;
-import org.teavm.classlib.impl.reflection.FieldWriter;
-import org.teavm.classlib.impl.reflection.Flags;
+import org.teavm.classlib.PlatformDetector;
 import org.teavm.classlib.java.lang.TClass;
 import org.teavm.classlib.java.lang.TIllegalAccessException;
 import org.teavm.classlib.java.lang.TIllegalArgumentException;
 import org.teavm.classlib.java.lang.TObject;
+import org.teavm.classlib.java.lang.annotation.TAnnotation;
+import org.teavm.interop.Address;
+import org.teavm.interop.Unmanaged;
+import org.teavm.runtime.GC;
+import org.teavm.runtime.reflect.AnnotationInfoUtil;
+import org.teavm.runtime.reflect.ClassInfo;
+import org.teavm.runtime.reflect.ClassInfoUtil;
+import org.teavm.runtime.reflect.FieldInfo;
+import org.teavm.runtime.reflect.ModifiersInfo;
 
 public class TField extends TAccessibleObject implements TMember {
     private TClass<?> declaringClass;
-    private String name;
-    private int modifiers;
-    private int accessLevel;
-    private TClass<?> type;
-    private FieldReader getter;
-    private FieldWriter setter;
+    private FieldInfo fieldInfo;
+    private TAnnotation[] declaredAnnotations;
+    private TType genericType;
+    private boolean genericTypeInitialized;
 
-    public TField(TClass<?> declaringClass, String name, int modifiers, int accessLevel, TClass<?> type,
-            FieldReader getter, FieldWriter setter) {
+    public TField(TClass<?> declaringClass, FieldInfo fieldInfo) {
         this.declaringClass = declaringClass;
-        this.name = name;
-        this.modifiers = modifiers;
-        this.accessLevel = accessLevel;
-        this.type = type;
-        this.getter = getter;
-        this.setter = setter;
+        this.fieldInfo = fieldInfo;
     }
 
     @Override
@@ -50,25 +49,38 @@ public class TField extends TAccessibleObject implements TMember {
 
     @Override
     public String getName() {
-        return name;
+        return fieldInfo.name().getStringObject();
     }
 
     @Override
     public int getModifiers() {
-        return Flags.getModifiers(modifiers, accessLevel);
+        return fieldInfo.modifiers() & ModifiersInfo.JVM_FLAGS_MASK;
     }
 
     public boolean isEnumConstant() {
-        return (modifiers & Flags.ENUM) != 0;
+        return (fieldInfo.modifiers() & ModifiersInfo.ENUM) != 0;
     }
 
     @Override
     public boolean isSynthetic() {
-        return (modifiers & Flags.SYNTHETIC) != 0;
+        return (fieldInfo.modifiers() & ModifiersInfo.SYNTHETIC) != 0;
     }
 
     public TClass<?> getType() {
-        return type;
+        return (TClass<?>) (Object) ClassInfoUtil.resolve(fieldInfo.type()).classObject();
+    }
+
+    public TType getGenericType() {
+        if (!genericTypeInitialized) {
+            genericTypeInitialized = true;
+            var reflectionInfo = fieldInfo.reflection();
+            if (reflectionInfo != null && reflectionInfo.genericType() != null) {
+                genericType = TGenericTypeFactory.create(declaringClass, reflectionInfo.genericType());
+            } else {
+                genericType = getType();
+            }
+        }
+        return genericType;
     }
 
     @Override
@@ -78,7 +90,7 @@ public class TField extends TAccessibleObject implements TMember {
         if (sb.length() > 0) {
             sb.append(' ');
         }
-        sb.append(getType().getName()).append(' ').append(declaringClass.getName()).append(".").append(name);
+        sb.append(getType().getName()).append(' ').append(declaringClass.getName()).append(".").append(getName());
         return sb.toString();
     }
 
@@ -89,7 +101,10 @@ public class TField extends TAccessibleObject implements TMember {
     }
 
     public Object getWithoutCheck(Object obj) {
-        return getter.read(obj);
+        if ((fieldInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
+            declaringClass.initialize();
+        }
+        return fieldInfo.read(obj);
     }
 
     public void set(Object obj, Object value) throws TIllegalArgumentException, TIllegalAccessException {
@@ -98,12 +113,19 @@ public class TField extends TAccessibleObject implements TMember {
         setWithoutCheck(obj, value);
     }
 
+    @Unmanaged
     public void setWithoutCheck(Object obj, Object value) {
-        setter.write(obj, value);
+        if ((fieldInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
+            declaringClass.initialize();
+        } else if (PlatformDetector.requiresOwnGC() && fieldInfo.type().arrayDegree() == 0
+                && fieldInfo.type().classInfo().primitiveKind() == ClassInfo.PrimitiveKind.NOT) {
+            GC.writeBarrier(Address.ofObject(obj).toStructure());
+        }
+        fieldInfo.write(obj, value);
     }
 
     private void checkInstance(Object obj) {
-        if ((modifiers & Flags.STATIC) == 0) {
+        if ((fieldInfo.modifiers() & ModifiersInfo.STATIC) == 0) {
             if (obj == null) {
                 throw new NullPointerException();
             }
@@ -114,14 +136,31 @@ public class TField extends TAccessibleObject implements TMember {
     }
 
     public void checkGetAccess() throws TIllegalAccessException {
-        if (getter == null) {
-            throw new TIllegalAccessException();
-        }
     }
 
     public void checkSetAccess() throws TIllegalAccessException {
-        if (setter == null) {
-            throw new TIllegalAccessException();
+    }
+
+    @Override
+    public TAnnotation[] getAnnotations() {
+        return getDeclaredAnnotations();
+    }
+
+    @Override
+    public TAnnotation[] getDeclaredAnnotations() {
+        if (declaredAnnotations == null) {
+            var reflectionInfo = fieldInfo.reflection();
+            if (reflectionInfo != null) {
+                var count = reflectionInfo.annotationCount();
+                declaredAnnotations = new TAnnotation[count];
+                for (var i = 0; i < count; ++i) {
+                    declaredAnnotations[i] = (TAnnotation) AnnotationInfoUtil.createAnnotation(
+                            reflectionInfo.annotation(i));
+                }
+            } else {
+                declaredAnnotations = new TAnnotation[0];
+            }
         }
+        return declaredAnnotations.clone();
     }
 }

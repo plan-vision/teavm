@@ -49,6 +49,7 @@ import org.teavm.dependency.MethodDependencyInfo;
 import org.teavm.diagnostics.AccumulationDiagnostics;
 import org.teavm.diagnostics.Diagnostics;
 import org.teavm.diagnostics.ProblemProvider;
+import org.teavm.extension.ExtensionEnvironment;
 import org.teavm.model.BasicBlock;
 import org.teavm.model.ClassHierarchy;
 import org.teavm.model.ClassHolder;
@@ -99,6 +100,7 @@ import org.teavm.model.transformation.ClassInitializerInsertionTransformer;
 import org.teavm.model.util.ModelUtils;
 import org.teavm.model.util.ProgramUtils;
 import org.teavm.model.util.RegisterAllocator;
+import org.teavm.parsing.resource.ResourceProvider;
 import org.teavm.vm.spi.ClassFilter;
 import org.teavm.vm.spi.TeaVMHost;
 import org.teavm.vm.spi.TeaVMHostExtension;
@@ -134,13 +136,15 @@ import org.teavm.vm.spi.TeaVMPlugin;
  * @author Alexey Andreev
  */
 public class TeaVM implements TeaVMHost, ServiceRepository {
-    private static final MethodDescriptor MAIN_METHOD_DESC = new MethodDescriptor("main",
+    public static final MethodDescriptor MAIN_METHOD_DESC = new MethodDescriptor("main",
             ValueType.arrayOf(ValueType.object("java.lang.String")), ValueType.VOID);
+    public static final MethodDescriptor SHORT_MAIN_METHOD_DESC = new MethodDescriptor("main", ValueType.VOID);
     private static final MethodDescriptor CLINIT_DESC = new MethodDescriptor("<clinit>", ValueType.VOID);
 
     private final DependencyAnalyzer dependencyAnalyzer;
     private final AccumulationDiagnostics diagnostics = new AccumulationDiagnostics();
     private final ClassLoader classLoader;
+    private final ResourceProvider resourceProvider;
     private String entryPoint;
     private String entryPointName = "main";
     private final Set<String> preservedClasses = new HashSet<>();
@@ -170,9 +174,12 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
     TeaVM(TeaVMBuilder builder) {
         target = builder.target;
         classLoader = builder.classLoader;
+        resourceProvider = builder.resourceProvider;
         classSourcePacker = builder.classSourcePacker;
-        dependencyAnalyzer = builder.dependencyAnalyzerFactory.create(builder.classSource, classLoader,
-                this, diagnostics, builder.referenceCache, target.getPlatformTags());
+        dependencyAnalyzer = builder.dependencyAnalyzerFactory.create(builder.classSource, resourceProvider,
+                classLoader, this, diagnostics, builder.referenceCache, target.getPlatformTags(),
+                this::getProperties);
+        services.put(ExtensionEnvironment.class, dependencyAnalyzer.extensionEnvironment());
         dependencyAnalyzer.setObfuscated(builder.obfuscated);
         dependencyAnalyzer.setStrict(builder.strict);
         progressListener = new TeaVMProgressListener() {
@@ -231,6 +238,11 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
     @Override
     public ClassLoader getClassLoader() {
         return classLoader;
+    }
+
+    @Override
+    public ResourceProvider getResourceProvider() {
+        return resourceProvider;
     }
 
     /**
@@ -326,17 +338,31 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
         }
 
         dependencyAnalyzer.defer(() -> {
-            var mainMethod = cls.getMethod(MAIN_METHOD_DESC) != null
-                    ? dependencyAnalyzer.linkMethod(new MethodReference(entryPoint,
-                    "main", ValueType.parse(String[].class), ValueType.VOID))
-                    : null;
+            var mainMethodReader = cls.getMethod(MAIN_METHOD_DESC);
             dependencyAnalyzer.linkClass(entryPoint).initClass(null);
-            if (mainMethod != null) {
-                mainMethod.getVariable(1).propagate(dependencyAnalyzer.getType("[Ljava/lang/String;"));
-                mainMethod.getVariable(1).getArrayItem().propagate(dependencyAnalyzer.getType("java.lang.String"));
+            if (mainMethodReader != null) {
+                var mainMethod = dependencyAnalyzer.linkMethod(new MethodReference(entryPoint, MAIN_METHOD_DESC));
+                mainMethod.getVariable(1).propagate(dependencyAnalyzer.getType(ValueType.arrayOf(
+                        ValueType.object("java.lang.String"))));
+                mainMethod.getVariable(1).getArrayItem().propagate(dependencyAnalyzer.getClassType("java.lang.String"));
+                if (!mainMethodReader.hasModifier(ElementModifier.STATIC)) {
+                    mainMethod.getVariable(0).propagate(dependencyAnalyzer.getClassType(entryPoint));
+                    initMainClassConstructor();
+                }
+                mainMethod.use();
+            } else if (cls.getMethod(SHORT_MAIN_METHOD_DESC) != null) {
+                var mainMethod = dependencyAnalyzer.linkMethod(new MethodReference(entryPoint, SHORT_MAIN_METHOD_DESC));
+                initMainClassConstructor();
                 mainMethod.use();
             }
         });
+    }
+
+    private void initMainClassConstructor() {
+        var ctor = dependencyAnalyzer.linkMethod(entryPoint, new MethodDescriptor("<init>",
+                ValueType.VOID));
+        ctor.propagate(0, dependencyAnalyzer.getClassType(entryPoint));
+        ctor.use();
     }
 
     public void preserveType(String className) {
@@ -595,10 +621,6 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
     public ListableClassHolderSource link(DependencyAnalyzer dependency) {
         Linker linker = new Linker(dependency);
         var cutClasses = new MutableClassHolderSource();
-        if (wasCancelled()) {
-            return cutClasses;
-        }
-
         if (wasCancelled()) {
             return cutClasses;
         }
@@ -920,6 +942,11 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
         }
 
         @Override
+        public ResourceProvider getResourceProvider() {
+            return resourceProvider;
+        }
+
+        @Override
         public CacheStatus getCacheStatus() {
             return cacheStatus;
         }
@@ -990,6 +1017,11 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
         public TeaVMOptimizationLevel getOptimizationLevel() {
             return optimizationLevel;
         }
+
+        @Override
+        public ExtensionEnvironment extensionEnvironment() {
+            return dependencyAnalyzer.extensionEnvironment();
+        }
     };
 
     class PostProcessingClassHolderSource implements ListableClassHolderSource {
@@ -1006,6 +1038,9 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
         public ClassHolder get(String name) {
             return cache.computeIfAbsent(name, className -> {
                 ClassReader classReader = dependencyAnalyzer.getClassSource().get(className);
+                if (!dependencyAnalyzer.getReachableClasses().contains(className)) {
+                    return null;
+                }
                 if (classReader == null) {
                     return null;
                 }

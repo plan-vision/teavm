@@ -20,7 +20,7 @@ import org.teavm.classlib.java.lang.*;
 import org.teavm.classlib.java.util.TMap.Entry;
 import org.teavm.classlib.java.util.random.TRandomGenerator;
 
-public class TCollections extends TObject {
+public final class TCollections extends TObject {
     @SuppressWarnings("rawtypes")
     public static final TSet EMPTY_SET = new TTemplateCollections.AbstractImmutableSet<>() {
         @Override public int size() {
@@ -36,7 +36,7 @@ public class TCollections extends TObject {
             return false;
         }
         @Override public boolean containsAll(TCollection<?> c) {
-            return false;
+            return c.isEmpty();
         }
     };
 

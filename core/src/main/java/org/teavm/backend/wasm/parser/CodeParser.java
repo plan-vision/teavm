@@ -18,15 +18,15 @@ package org.teavm.backend.wasm.parser;
 import java.util.ArrayList;
 import java.util.List;
 import org.teavm.backend.wasm.model.WasmNumType;
-import org.teavm.backend.wasm.model.expression.WasmFloatBinaryOperation;
-import org.teavm.backend.wasm.model.expression.WasmFloatType;
-import org.teavm.backend.wasm.model.expression.WasmFloatUnaryOperation;
-import org.teavm.backend.wasm.model.expression.WasmInt32Subtype;
-import org.teavm.backend.wasm.model.expression.WasmInt64Subtype;
-import org.teavm.backend.wasm.model.expression.WasmIntBinaryOperation;
-import org.teavm.backend.wasm.model.expression.WasmIntType;
-import org.teavm.backend.wasm.model.expression.WasmIntUnaryOperation;
-import org.teavm.backend.wasm.model.expression.WasmSignedType;
+import org.teavm.backend.wasm.model.instruction.WasmFloatBinaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmFloatType;
+import org.teavm.backend.wasm.model.instruction.WasmFloatUnaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmInt32Subtype;
+import org.teavm.backend.wasm.model.instruction.WasmInt64Subtype;
+import org.teavm.backend.wasm.model.instruction.WasmIntBinaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmIntType;
+import org.teavm.backend.wasm.model.instruction.WasmIntUnaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmSignedType;
 
 public class CodeParser extends BaseSectionParser {
     private CodeListener codeListener;
@@ -83,8 +83,11 @@ public class CodeParser extends BaseSectionParser {
                 return parseConditional();
             case 0x06:
                 return parseTryCatch();
-            case 0x8:
+            case 0x08:
                 codeListener.throwInstruction(readLEB());
+                break;
+            case 0x0A:
+                codeListener.opcode(Opcode.THROW_REF);
                 break;
             case 0x0C:
                 parseBranch(BranchOpcode.BR);
@@ -111,12 +114,16 @@ public class CodeParser extends BaseSectionParser {
             case 0x1A:
                 codeListener.opcode(Opcode.DROP);
                 break;
-
+            case 0x1F:
+                return parseTryTable();
             case 0x20:
                 codeListener.local(LocalOpcode.GET, readLEB());
                 break;
             case 0x21:
                 codeListener.local(LocalOpcode.SET, readLEB());
+                break;
+            case 0x22:
+                codeListener.local(LocalOpcode.TEE, readLEB());
                 break;
 
             case 0x23:
@@ -771,7 +778,7 @@ public class CodeParser extends BaseSectionParser {
     }
 
     private boolean parseBlock(boolean isLoop) {
-        var type = reader.readType();
+        var type = reader.readBlockType();
         var token = codeListener.startBlock(isLoop, type);
         blockStack.add(new Block(token));
         if (!parseExpressions()) {
@@ -784,8 +791,56 @@ public class CodeParser extends BaseSectionParser {
         return true;
     }
 
+    private boolean parseTryTable() {
+        var type = reader.readBlockType();
+        var token = codeListener.tryTable(type);
+        var catchCount = reader.readLEB();
+        for (var i = 0; i < catchCount; i++) {
+            reportAddress();
+            switch (reader.data[reader.ptr++]) {
+                case 0x00: {
+                    var tag = readLEB();
+                    var depth = readLEB();
+                    var target = blockStack.get(blockStack.size() - depth - 1).token;
+                    codeListener.catchTag(tag, false, depth, target);
+                    break;
+                }
+                case 0x01: {
+                    var tag = readLEB();
+                    var depth = readLEB();
+                    var target = blockStack.get(blockStack.size() - depth - 1).token;
+                    codeListener.catchTag(tag, true, depth, target);
+                    break;
+                }
+                case 0x02: {
+                    var depth = readLEB();
+                    var target = blockStack.get(blockStack.size() - depth - 1).token;
+                    codeListener.catchAll(false, depth, target);
+                    break;
+                }
+                case 0x03: {
+                    var depth = readLEB();
+                    var target = blockStack.get(blockStack.size() - depth - 1).token;
+                    codeListener.catchAll(true, depth, target);
+                    break;
+                }
+                default:
+                    return false;
+            }
+        }
+        blockStack.add(new Block(token));
+        if (!parseExpressions()) {
+            return false;
+        }
+        blockStack.remove(blockStack.size() - 1);
+        reportAddress();
+        codeListener.endBlock(token, false);
+        ++reader.ptr;
+        return true;
+    }
+
     private boolean parseConditional() {
-        var type = reader.readType();
+        var type = reader.readBlockType();
         var token = codeListener.startConditionalBlock(type);
         blockStack.add(new Block(token));
         var hasElse = false;

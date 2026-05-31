@@ -19,4 +19,6 @@ import org.gradle.api.provider.Property;
 
 public interface TeaVMWebConfiguration extends TeaVMConfiguration {
     Property<Boolean> getAddedToWebApp();
+
+    Property<String> getTargetFileName();
 }

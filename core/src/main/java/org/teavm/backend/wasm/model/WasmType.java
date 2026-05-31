@@ -21,7 +21,17 @@ public abstract class WasmType {
     public static final WasmType.Number FLOAT32 = new Number(WasmNumType.FLOAT32);
     public static final WasmType.Number FLOAT64 = new Number(WasmNumType.FLOAT64);
 
+    public static final SpecialReference FUNC = SpecialReferenceKind.FUNC.asType();
+    public static final SpecialReference ANY = SpecialReferenceKind.ANY.asType();
+    public static final SpecialReference EQ = SpecialReferenceKind.EQ.asType();
+    public static final SpecialReference EXTERN = SpecialReferenceKind.EXTERN.asType();
+    public static final SpecialReference STRUCT = SpecialReferenceKind.STRUCT.asType();
+    public static final SpecialReference ARRAY = SpecialReferenceKind.ARRAY.asType();
+    public static final SpecialReference EXN = SpecialReferenceKind.EXN.asType();
+    public static final SpecialReference I31 = SpecialReferenceKind.I31.asType();
+
     private WasmStorageType.Regular storageType;
+    private WasmBlockType.Value blockType;
 
     private WasmType() {
     }
@@ -31,6 +41,13 @@ public abstract class WasmType {
             storageType = new WasmStorageType.Regular(this);
         }
         return storageType;
+    }
+
+    public WasmBlockType.Value asBlock() {
+        if (blockType == null) {
+            blockType = new WasmBlockType.Value(this);
+        }
+        return blockType;
     }
 
     public static WasmType.Number num(WasmNumType number) {
@@ -57,14 +74,6 @@ public abstract class WasmType {
     }
 
     public static abstract class Reference extends WasmType {
-        public static final SpecialReference FUNC = SpecialReferenceKind.FUNC.asType();
-        public static final SpecialReference ANY = SpecialReferenceKind.ANY.asType();
-        public static final SpecialReference EQ = SpecialReferenceKind.EQ.asType();
-        public static final SpecialReference EXTERN = SpecialReferenceKind.EXTERN.asType();
-        public static final SpecialReference STRUCT = SpecialReferenceKind.STRUCT.asType();
-        public static final SpecialReference ARRAY = SpecialReferenceKind.ARRAY.asType();
-        public static final SpecialReference I31 = SpecialReferenceKind.I31.asType();
-
         private final boolean nullable;
 
         Reference(boolean nullable) {
@@ -74,6 +83,10 @@ public abstract class WasmType {
         public boolean isNullable() {
             return nullable;
         }
+
+        public abstract Reference asNullable();
+
+        public abstract Reference asNonNull();
     }
 
     public static final class CompositeReference extends Reference {
@@ -82,6 +95,16 @@ public abstract class WasmType {
         CompositeReference(WasmCompositeType composite, boolean nullable) {
             super(nullable);
             this.composite = composite;
+        }
+
+        @Override
+        public Reference asNonNull() {
+            return composite.getNonNullReference();
+        }
+
+        @Override
+        public Reference asNullable() {
+            return composite.getReference();
         }
     }
 
@@ -92,6 +115,16 @@ public abstract class WasmType {
             super(nullable);
             this.kind = kind;
         }
+
+        @Override
+        public Reference asNonNull() {
+            return kind.nonNullType;
+        }
+
+        @Override
+        public Reference asNullable() {
+            return kind.type;
+        }
     }
 
     public enum SpecialReferenceKind {
@@ -101,6 +134,7 @@ public abstract class WasmType {
         EXTERN,
         STRUCT,
         ARRAY,
+        EXN,
         I31;
 
         private SpecialReference type;

@@ -1,5 +1,5 @@
 /*
- *  Copyright 2016 Alexey Andreev.
+ *  Copyright 2026 Alexey Andreev.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,63 +17,45 @@ package org.teavm.backend.wasm.intrinsics;
 
 import org.teavm.ast.ConstantExpr;
 import org.teavm.ast.InvocationExpr;
-import org.teavm.backend.wasm.generate.WasmClassGenerator;
-import org.teavm.backend.wasm.model.expression.WasmExpression;
-import org.teavm.backend.wasm.model.expression.WasmInt32Constant;
-import org.teavm.backend.wasm.model.expression.WasmIntBinary;
-import org.teavm.backend.wasm.model.expression.WasmIntBinaryOperation;
-import org.teavm.backend.wasm.model.expression.WasmIntType;
-import org.teavm.interop.Structure;
-import org.teavm.model.ClassReaderSource;
-import org.teavm.model.MethodReference;
+import org.teavm.backend.wasm.generate.WasmGeneratorUtil;
+import org.teavm.backend.wasm.generate.classes.WasmGCClassInfoProvider;
+import org.teavm.backend.wasm.model.instruction.WasmInstructionBuilder;
+import org.teavm.backend.wasm.model.instruction.WasmIntBinaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmIntType;
 import org.teavm.model.ValueType;
 
-public class StructureIntrinsic implements WasmIntrinsic {
-    private ClassReaderSource classSource;
-    private WasmClassGenerator classGenerator;
+public class StructureIntrinsic implements WasmGCInlineIntrinsic {
+    private final WasmGCClassInfoProvider classInfoProvider;
 
-    public StructureIntrinsic(ClassReaderSource classSource, WasmClassGenerator classGenerator) {
-        this.classSource = classSource;
-        this.classGenerator = classGenerator;
+    public StructureIntrinsic(WasmGCClassInfoProvider classInfoProvider) {
+        this.classInfoProvider = classInfoProvider;
     }
 
     @Override
-    public boolean isApplicable(MethodReference methodReference) {
-        if (!classSource.isSuperType(Structure.class.getName(), methodReference.getClassName()).orElse(false)) {
-            return false;
-        }
-        switch (methodReference.getName()) {
-            case "toAddress":
-            case "cast":
-            case "sizeOf":
-            case "add":
-                return true;
-        }
-        return false;
-    }
-
-    @Override
-    public WasmExpression apply(InvocationExpr invocation, WasmIntrinsicManager manager) {
+    public void apply(InvocationExpr invocation, WasmGCInlineIntrinsicContext context,
+            WasmInstructionBuilder builder) {
         switch (invocation.getMethod().getName()) {
             case "toAddress":
             case "cast":
-                return manager.generate(invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(0));
+                break;
             case "sizeOf": {
-                ValueType.Object type = (ValueType.Object) ((ConstantExpr) invocation.getArguments().get(0)).getValue();
-                return new WasmInt32Constant(classGenerator.getClassSize(type.getClassName()));
+                var type = (ValueType.Object) ((ConstantExpr) invocation.getArguments().get(0)).getValue();
+                builder.i32Const(classInfoProvider.getHeapSize(type.getClassName()));
+                break;
             }
             case "add": {
-                WasmExpression base = manager.generate(invocation.getArguments().get(1));
-                WasmExpression offset = manager.generate(invocation.getArguments().get(2));
-                Object type = ((ConstantExpr) invocation.getArguments().get(0)).getValue();
-                String className = ((ValueType.Object) type).getClassName();
-                int size = classGenerator.getClassSize(className);
-                int alignment = classGenerator.getClassAlignment(className);
-                size = WasmClassGenerator.align(size, alignment);
+                var type = ((ConstantExpr) invocation.getArguments().get(0)).getValue();
+                var className = ((ValueType.Object) type).getClassName();
+                int size = classInfoProvider.getHeapSize(className);
+                int alignment = classInfoProvider.getHeapAlignment(className);
+                size = WasmGeneratorUtil.align(size, alignment);
 
-                offset = new WasmIntBinary(WasmIntType.INT32, WasmIntBinaryOperation.MUL, offset,
-                        new WasmInt32Constant(size));
-                return new WasmIntBinary(WasmIntType.INT32, WasmIntBinaryOperation.ADD, base, offset);
+                context.generate(builder, invocation.getArguments().get(1));
+                context.generate(builder, invocation.getArguments().get(2));
+                builder.i32Const(size).intBinary(WasmIntType.INT32, WasmIntBinaryOperation.MUL)
+                        .intBinary(WasmIntType.INT32, WasmIntBinaryOperation.ADD);
+                break;
             }
             default:
                 throw new IllegalArgumentException(invocation.getMethod().toString());

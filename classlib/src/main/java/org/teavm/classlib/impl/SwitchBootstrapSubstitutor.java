@@ -17,8 +17,13 @@ package org.teavm.classlib.impl;
 
 import org.teavm.dependency.BootstrapMethodSubstitutor;
 import org.teavm.dependency.DynamicCallSite;
+import org.teavm.diagnostics.Diagnostics;
 import org.teavm.model.BasicBlock;
+import org.teavm.model.CallLocation;
+import org.teavm.model.DynamicConstant;
+import org.teavm.model.MethodReference;
 import org.teavm.model.RuntimeConstant;
+import org.teavm.model.TextLocation;
 import org.teavm.model.ValueType;
 import org.teavm.model.emit.PhiEmitter;
 import org.teavm.model.emit.ProgramEmitter;
@@ -27,6 +32,9 @@ import org.teavm.model.instructions.SwitchInstruction;
 import org.teavm.model.instructions.SwitchTableEntry;
 
 public class SwitchBootstrapSubstitutor implements BootstrapMethodSubstitutor {
+    private static final String CONSTANT_BOOTSTRAPS = "java.lang.invoke.ConstantBootstraps";
+    private static final String ENUM_DESC = "java.lang.Enum$EnumDesc";
+
     @Override
     public ValueEmitter substitute(DynamicCallSite callSite, ProgramEmitter pe) {
         boolean enumSwitch = callSite.getBootstrapMethod().getName().equals("enumSwitch");
@@ -59,10 +67,11 @@ public class SwitchBootstrapSubstitutor implements BootstrapMethodSubstitutor {
             switchInsn.getEntries().add(entry);
 
             var label = labels.get(i);
-            emitFragment(target, i, label, pe, result, joint, enumType);
-
             block = pe.prepareBlock();
-            pe.jump(block);
+            if (emitFragment(target, i, label, pe, result, joint, enumType, callSite.getAgent().getDiagnostics(),
+                    callSite.getLocation(), callSite.getCaller())) {
+                pe.jump(block);
+            }
             pe.enter(block);
         }
 
@@ -74,16 +83,13 @@ public class SwitchBootstrapSubstitutor implements BootstrapMethodSubstitutor {
         return result.getValue();
     }
 
-    private void emitFragment(ValueEmitter target, int idx, RuntimeConstant label, ProgramEmitter pe,
-            PhiEmitter result, BasicBlock exit, ValueType.Object enumType) {
+    private boolean emitFragment(ValueEmitter target, int idx, RuntimeConstant label, ProgramEmitter pe,
+            PhiEmitter result, BasicBlock exit, ValueType.Object enumType, Diagnostics diagnostics,
+            TextLocation location, MethodReference caller) {
         switch (label.getKind()) {
             case RuntimeConstant.TYPE:
                 ValueType type = label.getValueType();
-                pe.when(() -> target.instanceOf(type).isTrue())
-                        .thenDo(() -> {
-                            pe.constant(idx).propagateTo(result);
-                            pe.jump(exit);
-                        });
+                emitTypeFragment(target, idx, type, pe, result, exit);
                 break;
             case RuntimeConstant.INT:
                 int val = label.getInt();
@@ -113,8 +119,62 @@ public class SwitchBootstrapSubstitutor implements BootstrapMethodSubstitutor {
                             pe.jump(exit);
                         });
                 break;
+            case RuntimeConstant.DYNAMIC_CONSTANT:
+                return handleDynamicConstant(target, idx, label.getDynamicConstant(), pe, result, exit,
+                        diagnostics, new CallLocation(caller, location));
             default:
                 throw new IllegalArgumentException("Unsupported constant type: " + label.getKind());
         }
+        return true;
+    }
+
+    private boolean handleDynamicConstant(ValueEmitter target, int idx, DynamicConstant cst, ProgramEmitter pe,
+            PhiEmitter result, BasicBlock exit, Diagnostics diagnostics, CallLocation location) {
+        var bsm = cst.bootstrapMethod;
+        if (bsm.getClassName().equals(CONSTANT_BOOTSTRAPS)) {
+            switch (bsm.getName()) {
+                case "primitiveClass": {
+                    pe.constant(idx).propagateTo(result);
+                    pe.jump(exit);
+                    return false;
+                }
+                case "invoke": {
+                    handleInvokeConstant(target, idx, cst, pe, result, exit, diagnostics, location);
+                    return true;
+                }
+            }
+        }
+        var bsmRef = new MethodReference(bsm.getClassName(), bsm.getName(), bsm.signature());
+        diagnostics.error(location, "Unsupported dynamic constant: {{m0}}", bsmRef);
+        return false;
+    }
+
+    private void handleInvokeConstant(ValueEmitter target, int idx, DynamicConstant cst, ProgramEmitter pe,
+            PhiEmitter result, BasicBlock exit, Diagnostics diagnostics, CallLocation location) {
+        if (cst.type.isObject(ENUM_DESC)) {
+            // method handle is EnumDesc.of(ClassDesc, String)
+            var enumArgs = cst.bootstrapMethodArguments;
+            var classArgs = enumArgs.get(1).getDynamicConstant().bootstrapMethodArguments;
+            String enumClassName = classArgs.get(1).getString();
+            String enumConstantName = enumArgs.get(2).getString();
+            var enumType = ValueType.object(enumClassName);
+            pe.initClass(enumClassName);
+            pe.when(() -> pe.getField(enumClassName, enumConstantName, enumType).isSame(target))
+                    .thenDo(() -> {
+                        pe.constant(idx).propagateTo(result);
+                        pe.jump(exit);
+                    });
+        } else {
+            diagnostics.error(location, "Unsupported invoke constant type: {{t0}}", cst.type);
+        }
+    }
+
+    private void emitTypeFragment(ValueEmitter target, int idx, ValueType type, ProgramEmitter pe,
+            PhiEmitter result, BasicBlock exit) {
+        pe.when(() -> target.instanceOf(type).isTrue())
+                .thenDo(() -> {
+                    pe.constant(idx).propagateTo(result);
+                    pe.jump(exit);
+                });
     }
 }

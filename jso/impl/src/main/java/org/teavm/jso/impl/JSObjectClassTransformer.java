@@ -15,6 +15,10 @@
  */
 package org.teavm.jso.impl;
 
+import static org.teavm.jso.impl.JSMethods.JS_OBJECT;
+import static org.teavm.jso.impl.JSMethods.JS_OBJECT_CLASS;
+import static org.teavm.jso.impl.JSMethods.JS_WRAPPER_CLASS;
+import static org.teavm.jso.impl.JSMethods.OBJECT;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -27,7 +31,6 @@ import org.teavm.diagnostics.Diagnostics;
 import org.teavm.jso.JSClass;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSMethod;
-import org.teavm.jso.JSObject;
 import org.teavm.jso.JSProperty;
 import org.teavm.model.AccessLevel;
 import org.teavm.model.AnnotationHolder;
@@ -157,14 +160,14 @@ class JSObjectClassTransformer implements ClassHolderTransformer {
 
             var isConstructor = entry.getKey().getName().equals("<init>");
             var paramCount = method.parameterCount();
-            if (export.vararg) {
+            if (export.vararg && !wasmGC) {
                 --paramCount;
             }
             if (isConstructor) {
                 --paramCount;
             }
             var exportedMethodSignature = new ValueType[paramCount + 2];
-            Arrays.fill(exportedMethodSignature, JSMethods.JS_OBJECT);
+            Arrays.fill(exportedMethodSignature, JS_OBJECT);
             if (methodRef.getReturnType() == ValueType.VOID && !isConstructor) {
                 exportedMethodSignature[exportedMethodSignature.length - 1] = ValueType.VOID;
             }
@@ -190,11 +193,14 @@ class JSObjectClassTransformer implements ClassHolderTransformer {
                 variablesToPass[i] = program.createVariable();
             }
             if (export.vararg) {
-                transformVarargParam(variablesToPass, program, marshallInstructions, exportedMethod, 1);
+                if (!wasmGC) {
+                    transformVarargParam(variablesToPass, program, marshallInstructions, 1);
+                }
+                exportedMethod.getAnnotations().add(new AnnotationHolder(JSVararg.class.getName()));
             }
 
             for (int i = 0; i < method.parameterCount(); ++i) {
-                var byRef = i == method.parameterCount() - 1 && export.vararg
+                var byRef = i == method.parameterCount() - 1 && export.vararg && !wasmGC
                         && typeHelper.isSupportedByRefType(method.parameterType(i));
                 variablesToPass[i] = marshaller.unwrapReturnValue(callLocation, variablesToPass[i],
                         method.parameterType(i), byRef, true);
@@ -215,8 +221,8 @@ class JSObjectClassTransformer implements ClassHolderTransformer {
                 unmarshalledInstance.setType(InvocationType.SPECIAL);
                 unmarshalledInstance.setReceiver(program.createVariable());
                 unmarshalledInstance.setArguments(program.variableAt(1));
-                unmarshalledInstance.setMethod(new MethodReference(JSWrapper.class,
-                        "unmarshallJavaFromJs", JSObject.class, Object.class));
+                unmarshalledInstance.setMethod(new MethodReference(JS_WRAPPER_CLASS,
+                        "unmarshallJavaFromJs", JS_OBJECT, OBJECT));
                 basicBlock.add(unmarshalledInstance);
 
                 var castInstance = new CastInstruction();
@@ -277,12 +283,12 @@ class JSObjectClassTransformer implements ClassHolderTransformer {
 
             var paramCount = method.parameterCount();
             var vararg = method.hasModifier(ElementModifier.VARARGS);
-            if (vararg) {
+            if (vararg && !wasmGC) {
                 --paramCount;
             }
             var callLocation = new CallLocation(method.getReference());
             var exportedMethodSignature = new ValueType[paramCount + 1];
-            Arrays.fill(exportedMethodSignature, JSMethods.JS_OBJECT);
+            Arrays.fill(exportedMethodSignature, JS_OBJECT);
             if (method.getResultType() == ValueType.VOID) {
                 exportedMethodSignature[exportedMethodSignature.length - 1] = ValueType.VOID;
             }
@@ -310,11 +316,14 @@ class JSObjectClassTransformer implements ClassHolderTransformer {
                 variablesToPass[i] = program.createVariable();
             }
             if (vararg) {
-                transformVarargParam(variablesToPass, program, marshallInstructions, exportedMethod, 0);
+                if (!wasmGC) {
+                    transformVarargParam(variablesToPass, program, marshallInstructions, 0);
+                }
+                exportedMethod.getAnnotations().add(new AnnotationHolder(JSVararg.class.getName()));
             }
 
             for (int i = 0; i < method.parameterCount(); ++i) {
-                var byRef = i == method.parameterCount() - 1 && vararg
+                var byRef = i == method.parameterCount() - 1 && vararg && !wasmGC
                         && typeHelper.isSupportedByRefType(method.parameterType(i));
                 variablesToPass[i] = marshaller.unwrapReturnValue(callLocation, variablesToPass[i],
                         method.parameterType(i), byRef, true);
@@ -348,7 +357,7 @@ class JSObjectClassTransformer implements ClassHolderTransformer {
     }
 
     private void transformVarargParam(Variable[] variablesToPass, Program program,
-            List<Instruction> instructions, MethodHolder method, int additionalSkip) {
+            List<Instruction> instructions, int additionalSkip) {
         var last = variablesToPass.length - 1;
 
         var lastConstant = new IntegerConstantInstruction();
@@ -362,8 +371,6 @@ class JSObjectClassTransformer implements ClassHolderTransformer {
         extractVarargs.setArguments(lastConstant.getReceiver());
         extractVarargs.setReceiver(variablesToPass[last]);
         instructions.add(extractVarargs);
-
-        method.getAnnotations().add(new AnnotationHolder(JSVararg.class.getName()));
     }
 
     private AnnotationHolder createExportAnnotation(MethodExport export) {
@@ -479,7 +486,7 @@ class JSObjectClassTransformer implements ClassHolderTransformer {
     }
 
     private boolean addInterface(Diagnostics diagnostics, ExposedClass exposedCls, ClassReader cls) {
-        if (cls.getName().equals(JSObject.class.getName())) {
+        if (cls.getName().equals(JS_OBJECT_CLASS)) {
             return true;
         }
         return addInterfaces(diagnostics, exposedCls, cls);
@@ -571,7 +578,7 @@ class JSObjectClassTransformer implements ClassHolderTransformer {
 
         FieldHolder field = new FieldHolder("$$jso_functor$$");
         field.setLevel(AccessLevel.PUBLIC);
-        field.setType(ValueType.parse(JSObject.class));
+        field.setType(JS_OBJECT);
         cls.addField(field);
 
         AnnotationHolder annot = new AnnotationHolder(FunctorImpl.class.getName());

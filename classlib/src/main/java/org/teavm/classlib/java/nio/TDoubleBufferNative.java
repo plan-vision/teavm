@@ -15,11 +15,13 @@
  */
 package org.teavm.classlib.java.nio;
 
+import org.teavm.classlib.PlatformDetector;
+import org.teavm.classlib.java.nio.file.TAddressBasedBuffer;
 import org.teavm.interop.Address;
 import org.teavm.jso.typedarrays.ArrayBufferView;
 import org.teavm.jso.typedarrays.Float64Array;
 
-class TDoubleBufferNative extends TDoubleBufferImpl implements TArrayBufferViewProvider {
+class TDoubleBufferNative extends TDoubleBufferImpl implements TArrayBufferViewProvider, TAddressBasedBuffer {
     Object gcRef;
     double[] array;
     boolean readOnly;
@@ -42,6 +44,11 @@ class TDoubleBufferNative extends TDoubleBufferImpl implements TArrayBufferViewP
     }
 
     @Override
+    public Address getDataAddress() {
+        return address;
+    }
+
+    @Override
     int capacityImpl() {
         return capacity;
     }
@@ -61,7 +68,7 @@ class TDoubleBufferNative extends TDoubleBufferImpl implements TArrayBufferViewP
 
     @Override
     int getArrayOffset() {
-        if (array == null) {
+        if (PlatformDetector.isWebAssemblyGC() || array == null) {
             throw new UnsupportedOperationException();
         }
         return (int) (address.diff(Address.ofData(array)) / 8);
@@ -174,10 +181,16 @@ class TDoubleBufferNative extends TDoubleBufferImpl implements TArrayBufferViewP
     }
 
     void copy(double[] from, int fromOffset, Address to, int count) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            throw new UnsupportedOperationException();
+        }
         TByteBufferNative.copy(Address.ofData(from).add(fromOffset * 8), to, count * 8);
     }
 
     void copy(Address from, double[] to, int toOffset, int count) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            throw new UnsupportedOperationException();
+        }
         TByteBufferNative.copy(from, Address.ofData(to).add(toOffset * 8), count * 8);
     }
 }

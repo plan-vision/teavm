@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
 import org.teavm.backend.javascript.JSModuleType;
 import org.teavm.backend.wasm.WasmDebugInfoLevel;
 import org.teavm.backend.wasm.WasmDebugInfoLocation;
@@ -63,13 +64,12 @@ public class InProcessBuildStrategy implements BuildStrategy {
     private String[] transformers = new String[0];
     private String[] classesToPreserve = new String[0];
     private WasmBinaryVersion wasmVersion = WasmBinaryVersion.V_0x1;
-    private boolean wasmExceptionsUsed;
     private WasmDebugInfoLevel wasmDebugInfoLevel;
     private WasmDebugInfoLocation wasmDebugInfoLocation;
     private int minHeapSize = 4 * 1024 * 1024;
     private int maxHeapSize = 128 * 1024 * 1024;
     private int minDirectBuffersSize = 2 * 1024 * 1024;
-    private int maxDirectBuffersSize = 32 * 1024 * 1024;
+    private boolean sharedBuffer;
     private final List<SourceFileProvider> sourceFileProviders = new ArrayList<>();
     private boolean heapDump;
     private TeaVMProgressListener progressListener;
@@ -221,11 +221,6 @@ public class InProcessBuildStrategy implements BuildStrategy {
     }
 
     @Override
-    public void setWasmExceptionsUsed(boolean wasmExceptionsUsed) {
-        this.wasmExceptionsUsed = wasmExceptionsUsed;
-    }
-
-    @Override
     public void setWasmDebugInfoLevel(WasmDebugInfoLevel wasmDebugInfoLevel) {
         this.wasmDebugInfoLevel = wasmDebugInfoLevel;
     }
@@ -251,8 +246,8 @@ public class InProcessBuildStrategy implements BuildStrategy {
     }
 
     @Override
-    public void setMaxDirectBuffersSize(int maxDirectBuffersSize) {
-        this.maxDirectBuffersSize = maxDirectBuffersSize;
+    public void setSharedBuffer(boolean sharedBuffer) {
+        this.sharedBuffer = sharedBuffer;
     }
 
     @Override
@@ -282,6 +277,7 @@ public class InProcessBuildStrategy implements BuildStrategy {
         tool.setTargetFileName(targetFileName);
         var classLoader = buildClassLoader();
         tool.setClassLoader(classLoader);
+        tool.setClassPath(classPathEntries.stream().map(File::new).collect(Collectors.toList()));
         tool.setOptimizationLevel(optimizationLevel);
         tool.setFastDependencyAnalysis(fastDependencyAnalysis);
 
@@ -298,13 +294,12 @@ public class InProcessBuildStrategy implements BuildStrategy {
         tool.getClassesToPreserve().addAll(Arrays.asList(classesToPreserve));
         tool.setCacheDirectory(cacheDirectory != null ? new File(cacheDirectory) : null);
         tool.setWasmVersion(wasmVersion);
-        tool.setWasmExceptionsUsed(wasmExceptionsUsed);
         tool.setWasmDebugInfoLevel(wasmDebugInfoLevel);
         tool.setWasmDebugInfoLocation(wasmDebugInfoLocation);
         tool.setMinHeapSize(minHeapSize);
         tool.setMaxHeapSize(maxHeapSize);
         tool.setMinDirectBuffersSize(minDirectBuffersSize);
-        tool.setMaxDirectBuffersSize(maxDirectBuffersSize);
+        tool.setSharedBuffer(sharedBuffer);
         tool.setHeapDump(heapDump);
         tool.setShortFileNames(shortFileNames);
         tool.setAssertionsRemoved(assertionsRemoved);

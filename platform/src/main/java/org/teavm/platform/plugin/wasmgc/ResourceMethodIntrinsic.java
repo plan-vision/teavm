@@ -16,26 +16,30 @@
 package org.teavm.platform.plugin.wasmgc;
 
 import org.teavm.ast.InvocationExpr;
-import org.teavm.backend.wasm.intrinsics.gc.WasmGCIntrinsic;
-import org.teavm.backend.wasm.intrinsics.gc.WasmGCIntrinsicContext;
+import org.teavm.backend.wasm.generate.classes.WasmGCTypeMapper;
+import org.teavm.backend.wasm.intrinsics.WasmGCInlineIntrinsic;
+import org.teavm.backend.wasm.intrinsics.WasmGCInlineIntrinsicContext;
 import org.teavm.backend.wasm.model.WasmStructure;
 import org.teavm.backend.wasm.model.WasmType;
-import org.teavm.backend.wasm.model.expression.WasmExpression;
-import org.teavm.backend.wasm.model.expression.WasmStructGet;
+import org.teavm.backend.wasm.model.instruction.WasmInstructionBuilder;
 import org.teavm.model.ValueType;
 
-class ResourceMethodIntrinsic implements WasmGCIntrinsic {
+class ResourceMethodIntrinsic implements WasmGCInlineIntrinsic {
+    private WasmGCTypeMapper typeMapper;
     private int fieldIndex;
 
-    ResourceMethodIntrinsic(int fieldIndex) {
+    ResourceMethodIntrinsic(WasmGCTypeMapper typeMapper, int fieldIndex) {
+        this.typeMapper = typeMapper;
         this.fieldIndex = fieldIndex;
     }
 
     @Override
-    public WasmExpression apply(InvocationExpr invocation, WasmGCIntrinsicContext context) {
-        var structType = (WasmType.CompositeReference) context.typeMapper().mapType(
+    public void apply(InvocationExpr invocation, WasmGCInlineIntrinsicContext context,
+            WasmInstructionBuilder builder) {
+        var structType = (WasmType.CompositeReference) typeMapper.mapType(
                 ValueType.object(invocation.getMethod().getClassName()));
         var struct = (WasmStructure) structType.composite;
-        return new WasmStructGet(struct, context.generate(invocation.getArguments().get(0)), fieldIndex);
+        context.generate(builder, invocation.getArguments().get(0));
+        builder.structGet(struct, fieldIndex);
     }
 }

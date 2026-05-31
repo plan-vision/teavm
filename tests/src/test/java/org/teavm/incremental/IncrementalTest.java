@@ -60,6 +60,7 @@ import org.teavm.model.Program;
 import org.teavm.model.ReferenceCache;
 import org.teavm.model.util.ModelUtils;
 import org.teavm.parsing.ClasspathClassHolderSource;
+import org.teavm.parsing.ClasspathResourceProvider;
 import org.teavm.tooling.TeaVMProblemRenderer;
 import org.teavm.vm.BuildTarget;
 import org.teavm.vm.TeaVM;
@@ -70,8 +71,7 @@ public class IncrementalTest {
     private static final String OLD_FILE = "classes-old.js";
     private static final String NEW_FILE = "classes-new.js";
     private static final String REFRESHED_FILE = "classes-refreshed.js";
-    private static ClassHolderSource oldClassSource = new ClasspathClassHolderSource(
-            IncrementalTest.class.getClassLoader(), new ReferenceCache());
+    private static ClassHolderSource oldClassSource = new ClasspathClassHolderSource(new ReferenceCache());
     private static Context rhinoContext;
     private static ScriptableObject rhinoRootScope;
     private String[] updatedMethods;
@@ -195,6 +195,7 @@ public class IncrementalTest {
             TeaVM vm = new TeaVMBuilder(target)
                     .setClassLoader(IncrementalTest.class.getClassLoader())
                     .setClassSource(classSource)
+                    .setResourceProvider(new ClasspathResourceProvider(IncrementalTest.class.getClassLoader()))
                     .setDependencyAnalyzerFactory(FastDependencyAnalyzer::new)
                     .build();
             vm.setCacheStatus(cacheStatus);

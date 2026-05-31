@@ -22,5 +22,6 @@ public class MetaprogrammingPlugin implements TeaVMPlugin {
     @Override
     public void install(TeaVMHost host) {
         host.add(new MetaprogrammingDependencyListener());
+        host.add(new MetaprogrammingClassTransformer());
     }
 }

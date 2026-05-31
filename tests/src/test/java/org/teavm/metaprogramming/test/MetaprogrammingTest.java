@@ -19,26 +19,25 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.teavm.metaprogramming.Metaprogramming.arrayClass;
+import static org.teavm.metaprogramming.Metaprogramming.accessor;
+import static org.teavm.metaprogramming.Metaprogramming.caller;
 import static org.teavm.metaprogramming.Metaprogramming.emit;
+import static org.teavm.metaprogramming.Metaprogramming.environment;
 import static org.teavm.metaprogramming.Metaprogramming.exit;
-import static org.teavm.metaprogramming.Metaprogramming.findClass;
+import static org.teavm.metaprogramming.Metaprogramming.handle;
 import static org.teavm.metaprogramming.Metaprogramming.lazy;
 import static org.teavm.metaprogramming.Metaprogramming.unsupportedCase;
 import java.util.function.Consumer;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.teavm.extension.introspect.IntrospectAnnotation;
+import org.teavm.extension.introspect.IntrospectClass;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipJVM;
-import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTestRunner;
-import org.teavm.junit.TestPlatform;
 import org.teavm.metaprogramming.CompileTime;
 import org.teavm.metaprogramming.Meta;
-import org.teavm.metaprogramming.ReflectClass;
 import org.teavm.metaprogramming.Value;
-import org.teavm.metaprogramming.reflect.ReflectField;
-import org.teavm.metaprogramming.reflect.ReflectMethod;
 import org.teavm.metaprogramming.test.subpackage.MetaprogrammingGenerator;
 
 @CompileTime
@@ -54,12 +53,12 @@ public class MetaprogrammingTest {
 
     @Meta
     static native int classNameLength(Class<?> cls, int add);
-    static void classNameLength(ReflectClass<?> cls, Value<Integer> add) {
-        if (cls != findClass(Object.class) && cls != findClass(Integer.class)) {
+    static void classNameLength(IntrospectClass<?> cls, Value<Integer> add) {
+        if (cls != environment().findClass(Object.class) && cls != environment().findClass(Integer.class)) {
             unsupportedCase();
             return;
         }
-        int length = cls.getName().length();
+        int length = cls.name().length();
         exit(() -> length + add.get());
     }
 
@@ -74,12 +73,12 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native Object getField(Class<?> cls, Object obj);
-    private static void getField(ReflectClass<Object> cls, Value<Object> obj) {
-        if (cls.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void getField(IntrospectClass<Object> cls, Value<Object> obj) {
+        if (!cls.hasAnnotation(MetaprogrammingClass.class)) {
             unsupportedCase();
             return;
         }
-        ReflectField field = cls.getField("a");
+        var field = accessor(cls.field("a"));
         exit(() -> field.get(obj));
     }
     @Test
@@ -92,12 +91,12 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native void setField(Class<?> cls, Object obj, Object value);
-    private static void setField(ReflectClass<Object> cls, Value<Object> obj, Value<Object> value) {
-        if (cls.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void setField(IntrospectClass<Object> cls, Value<Object> obj, Value<Object> value) {
+        if (!cls.hasAnnotation(MetaprogrammingClass.class)) {
             unsupportedCase();
             return;
         }
-        ReflectField field = cls.getField("a");
+        var field = accessor(cls.field("a"));
         emit(() -> field.set(obj, value));
     }
 
@@ -111,33 +110,35 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native String callDebug(Class<?> cls, Object obj);
-    private static void callDebug(ReflectClass<?> cls, Value<Object> obj) {
-        if (cls.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void callDebug(IntrospectClass<?> cls, Value<Object> obj) {
+        if (!cls.hasAnnotation(MetaprogrammingClass.class)) {
             unsupportedCase();
             return;
         }
-        ReflectMethod method = cls.getMethod("debug");
+        var method = cls.method("debug");
         if (method == null) {
             exit(() -> "missing");
         } else {
-            exit(() -> method.invoke(obj.get()));
+            var caller = caller(method);
+            exit(() -> caller.call(obj.get()));
         }
     }
 
     @Meta
     private static native String callDebug(Class<?> cls, Object obj, String a, int b);
-    private static void callDebug(ReflectClass<?> cls, Value<Object> obj, Value<String> a, Value<Integer> b) {
-        if (cls.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void callDebug(IntrospectClass<?> cls, Value<Object> obj, Value<String> a, Value<Integer> b) {
+        if (!cls.hasAnnotation(MetaprogrammingClass.class)) {
             unsupportedCase();
             return;
         }
-        ReflectClass<String> stringClass = findClass(String.class);
-        ReflectClass<Integer> intClass =  findClass(int.class);
-        ReflectMethod method = cls.getMethod("debug", stringClass, intClass);
+        var stringClass = environment().findClass(String.class);
+        var intClass = environment().findClass(int.class);
+        var method = cls.method("debug", stringClass, intClass);
         if (method == null) {
             exit(() -> "missing");
         } else {
-            exit(() -> method.invoke(obj.get(), a.get(), b.get()));
+            var caller = caller(method);
+            exit(() -> caller.call(obj.get(), a.get(), b.get()));
         }
     }
 
@@ -156,14 +157,15 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native Object callConstructor(Class<?> type);
-    private static void callConstructor(ReflectClass<?> type) {
-        if (type.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void callConstructor(IntrospectClass<?> type) {
+        if (!type.hasAnnotation(MetaprogrammingClass.class)) {
             unsupportedCase();
             return;
         }
-        ReflectMethod ctor = type.getMethod("<init>");
+        var ctor = type.method("<init>");
         if (ctor != null) {
-            exit(() -> ctor.construct());
+            var caller = caller(ctor);
+            exit(() -> caller.construct());
         } else {
             exit(() -> null);
         }
@@ -171,16 +173,17 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native Object callConstructor(Class<?> type, String a, int b);
-    private static void callConstructor(ReflectClass<?> type, Value<String> a, Value<Integer> b) {
-        if (type.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void callConstructor(IntrospectClass<?> type, Value<String> a, Value<Integer> b) {
+        if (!type.hasAnnotation(MetaprogrammingClass.class)) {
             unsupportedCase();
             return;
         }
-        ReflectClass<String> stringClass = findClass(String.class);
-        ReflectClass<Integer> intClass = findClass(int.class);
-        ReflectMethod ctor = type.getMethod("<init>", stringClass, intClass);
+        var stringClass = environment().findClass(String.class);
+        var intClass = environment().findClass(int.class);
+        var ctor = type.method("<init>", stringClass, intClass);
         if (ctor != null) {
-            exit(() -> ctor.construct(a, b));
+            var caller = caller(ctor);
+            exit(() -> caller.construct(a, b));
         } else {
             exit(() -> null);
         }
@@ -206,12 +209,46 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native boolean isInstance(Object obj, Class<?> type);
-    private static void isInstance(Value<Object> obj, ReflectClass<?> type) {
-        if (type.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void isInstance(Value<Object> obj, IntrospectClass<?> type) {
+        if (type.annotation(MetaprogrammingClass.class) == null) {
             unsupportedCase();
             return;
         }
-        exit(() -> type.isInstance(obj.get()));
+        var classHandle = handle(type);
+        exit(() -> classHandle.isInstance(obj.get()));
+    }
+
+    @Test
+    public void getsArrayLengthViaHandle() {
+        assertEquals(3, getArrayLength(String.class, new String[] { "a", "b", "c" }));
+    }
+
+    @Meta
+    private static native int getArrayLength(Class<?> type, Object array);
+    private static void getArrayLength(IntrospectClass<?> type, Value<Object> array) {
+        if (!type.isAssignableFrom(String.class)) {
+            unsupportedCase();
+            return;
+        }
+        var classHandle = handle(type);
+        exit(() -> classHandle.getArrayLength(array.get()));
+    }
+
+    @Test
+    public void castsViaHandle() {
+        assertEquals("hello", castToType(String.class, "hello"));
+        assertNull(castToType(String.class, null));
+    }
+
+    @Meta
+    private static native Object castToType(Class<?> type, Object obj);
+    private static void castToType(IntrospectClass<?> type, Value<Object> obj) {
+        if (!type.isAssignableFrom(String.class)) {
+            unsupportedCase();
+            return;
+        }
+        var classHandle = handle(type);
+        exit(() -> classHandle.cast(obj.get()));
     }
 
     @Test
@@ -236,39 +273,40 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native String readAnnotations(Class<?> cls, Object obj);
-    private static void readAnnotations(ReflectClass<Object> cls, Value<Object> obj) {
-        if (cls.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void readAnnotations(IntrospectClass<Object> cls, Value<Object> obj) {
+        if (!cls.hasAnnotation(MetaprogrammingClass.class)) {
             unsupportedCase();
             return;
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append(describeAnnotation(cls.getAnnotation(TestAnnotation.class))).append('\n');
-        for (ReflectMethod method : cls.getDeclaredMethods()) {
-            TestAnnotation annot = method.getAnnotation(TestAnnotation.class);
+        sb.append(describeAnnotation(cls.annotation(TestAnnotation.class))).append('\n');
+        for (var method : cls.declaredMethods()) {
+            var annot = method.annotation(TestAnnotation.class);
             if (annot == null) {
                 continue;
             }
-            sb.append(method.getName()).append('=').append(describeAnnotation(annot)).append('\n');
+            sb.append(method.name()).append('=').append(describeAnnotation(annot)).append('\n');
         }
-        for (ReflectField field : cls.getDeclaredFields()) {
-            TestAnnotation annot = field.getAnnotation(TestAnnotation.class);
+        for (var field : cls.declaredFields()) {
+            var annot = field.annotation(TestAnnotation.class);
             if (annot == null) {
                 continue;
             }
-            sb.append(field.getName()).append('=').append(describeAnnotation(annot)).append('\n');
+            sb.append(field.name()).append('=').append(describeAnnotation(annot)).append('\n');
         }
         String result = sb.toString();
         exit(() -> result);
     }
 
-    private static String describeAnnotation(TestAnnotation annot) {
+    private static String describeAnnotation(IntrospectAnnotation<? extends TestAnnotation> annot) {
         StringBuilder sb = new StringBuilder();
-        sb.append(annot.a()).append(':').append(annot.b());
-        for (Class<?> cls : annot.c()) {
-            sb.append(':').append(cls.getSimpleName());
+        sb.append(annot.value("a")).append(':').append(annot.value("b"));
+        var cValue = (IntrospectClass<?>[]) annot.value("c");
+        for (var cls : cValue) {
+            sb.append(':').append(cls.simpleName());
         }
-        sb.append(':').append(annot.d());
+        sb.append(':').append(annot.value("d"));
         return sb.toString();
     }
 
@@ -315,12 +353,12 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native String emitClassLiteral(Class<?> cls);
-    private static void emitClassLiteral(ReflectClass<?> cls) {
+    private static void emitClassLiteral(IntrospectClass<?> cls) {
         if (!cls.isAssignableFrom(String.class)) {
             unsupportedCase();
             return;
         }
-        ReflectClass<?> arrayClass = arrayClass(cls);
+        var arrayClass = cls.arrayType();
         exit(() -> arrayClass.asJavaClass().getName());
     }
 
@@ -333,27 +371,29 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native Object createArrayOfType(Class<?> cls, int size);
-    private static void createArrayOfType(ReflectClass<?> cls, Value<Integer> size) {
+    private static void createArrayOfType(IntrospectClass<?> cls, Value<Integer> size) {
         if (!cls.isAssignableFrom(String.class)) {
             unsupportedCase();
             return;
         }
-        exit(() -> cls.createArray(size.get()));
+        var classHandle = handle(cls);
+        exit(() -> classHandle.createArray(size.get()));
     }
 
     @Test
     public void getsArrayElementViaReflection() {
-        assertEquals("foo", getArrayElement(String[].class, new String[] { "foo" }, 0));
+        assertEquals("foo", getArrayElement(String.class, new String[] { "foo" }, 0));
     }
 
     @Meta
     private static native Object getArrayElement(Class<?> type, Object array, int index);
-    private static void getArrayElement(ReflectClass<?> type, Value<Object> array, Value<Integer> index) {
-        if (!type.isAssignableFrom(String[].class)) {
+    private static void getArrayElement(IntrospectClass<?> type, Value<Object> array, Value<Integer> index) {
+        if (!type.isAssignableFrom(String.class)) {
             unsupportedCase();
             return;
         }
-        exit(() -> type.getArrayElement(array.get(), index.get()));
+        var classHandle = handle(type);
+        exit(() -> classHandle.getArrayElement(array.get(), index.get()));
     }
 
     @Test
@@ -394,16 +434,16 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native String fieldType(Class<?> cls, String name);
-    private static void fieldType(ReflectClass<Object> cls, Value<String> name) {
-        if (cls.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void fieldType(IntrospectClass<Object> cls, Value<String> name) {
+        if (!cls.hasAnnotation(MetaprogrammingClass.class)) {
             unsupportedCase();
             return;
         }
 
         Value<String> result = lazy(() -> null);
-        for (ReflectField field : cls.getDeclaredFields()) {
-            String type = field.getType().getName();
-            String fieldName = field.getName();
+        for (var field : cls.declaredFields()) {
+            String type = field.type().name();
+            String fieldName = field.name();
             Value<String> existing = result;
             result = lazy(() -> fieldName.equals(name.get()) ? type : existing.get());
         }
@@ -433,8 +473,9 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native void fieldType(Class<?> cls, String name, Consumer<String> typeConsumer);
-    private static void fieldType(ReflectClass<Object> cls, Value<String> name, Value<Consumer<String>> typeConsumer) {
-        if (cls.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void fieldType(IntrospectClass<Object> cls, Value<String> name,
+            Value<Consumer<String>> typeConsumer) {
+        if (!cls.hasAnnotation(MetaprogrammingClass.class)) {
             unsupportedCase();
             return;
         }
@@ -443,9 +484,9 @@ public class MetaprogrammingTest {
             typeConsumer.get().accept(null);
             return null;
         });
-        for (ReflectField field : cls.getDeclaredFields()) {
-            String type = field.getType().getName();
-            String fieldName = field.getName();
+        for (var field : cls.declaredFields()) {
+            String type = field.type().name();
+            String fieldName = field.name();
             Value<Void> existing = result;
             result = lazy(() -> {
                 if (fieldName.equals(name.get())) {
@@ -468,8 +509,8 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native void withUnassignedLazy(Class<?> cls);
-    private static void withUnassignedLazy(ReflectClass<Object> cls) {
-        if (cls.getAnnotation(MetaprogrammingClass.class) == null) {
+    private static void withUnassignedLazy(IntrospectClass<Object> cls) {
+        if (!cls.hasAnnotation(MetaprogrammingClass.class)) {
             unsupportedCase();
             return;
         }
@@ -484,7 +525,6 @@ public class MetaprogrammingTest {
     private static int counter;
 
     @Test
-    @SkipPlatform({TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
     public void arrayTypeSelected() {
         assertEquals(String[].class, createInstance(String.class, 1).getClass());
         assertEquals(String[][].class, createInstance(String[].class, 1).getClass());
@@ -492,12 +532,13 @@ public class MetaprogrammingTest {
 
     @Meta
     private static native Object createInstance(Class<?> cls, int size);
-    private static void createInstance(ReflectClass<?> cls, Value<Integer> size) {
+    private static void createInstance(IntrospectClass<?> cls, Value<Integer> size) {
         if (!cls.isAssignableFrom(String.class) && !cls.isAssignableFrom(String[].class)) {
             unsupportedCase();
             return;
         }
-        exit(() -> cls.createArray(size.get()));
+        var classHandle = handle(cls);
+        exit(() -> classHandle.createArray(size.get()));
     }
 
     @MetaprogrammingClass

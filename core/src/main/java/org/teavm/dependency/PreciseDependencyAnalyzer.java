@@ -15,6 +15,8 @@
  */
 package org.teavm.dependency;
 
+import java.util.Properties;
+import java.util.function.Supplier;
 import org.teavm.common.ServiceRepository;
 import org.teavm.diagnostics.Diagnostics;
 import org.teavm.model.ClassReaderSource;
@@ -22,15 +24,17 @@ import org.teavm.model.FieldReference;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ReferenceCache;
 import org.teavm.model.ValueType;
+import org.teavm.parsing.resource.ResourceProvider;
 
 public class PreciseDependencyAnalyzer extends DependencyAnalyzer {
     private DependencyNode allArrayItemsNode;
     private static final int DEGREE_THRESHOLD = 2;
 
-    public PreciseDependencyAnalyzer(ClassReaderSource classSource, ClassLoader classLoader,
-            ServiceRepository services, Diagnostics diagnostics, ReferenceCache referenceCache,
-            String[] platformTags) {
-        super(classSource, classLoader, services, diagnostics, referenceCache, platformTags);
+    public PreciseDependencyAnalyzer(ClassReaderSource classSource, ResourceProvider resourceProvider,
+            ClassLoader classLoader, ServiceRepository services, Diagnostics diagnostics,
+            ReferenceCache referenceCache, String[] platformTags, Supplier<Properties> properties) {
+        super(classSource, resourceProvider, classLoader, services, diagnostics, referenceCache, platformTags,
+                properties);
     }
 
     @Override

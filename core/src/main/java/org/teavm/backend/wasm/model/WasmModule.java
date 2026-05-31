@@ -22,8 +22,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.teavm.backend.wasm.model.expression.WasmDefaultExpressionVisitor;
-import org.teavm.backend.wasm.model.expression.WasmGetGlobal;
+import org.teavm.backend.wasm.model.instruction.WasmDefaultInstructionVisitor;
+import org.teavm.backend.wasm.model.instruction.WasmGetGlobal;
 import org.teavm.common.Graph;
 import org.teavm.common.GraphUtils;
 
@@ -40,7 +40,10 @@ public class WasmModule {
     public final WasmCollection<WasmGlobal> globals = new WasmCollection<>();
     public final WasmCollection<WasmCompositeType> types = new WasmCollection<>();
     public final WasmCollection<WasmTag> tags = new WasmCollection<>();
-    public String memoryExportName = "memory";
+    public String memoryExportName;
+    public String memoryImportName;
+    public String memoryImportModule;
+    public boolean sharedMemory;
 
     public void add(WasmCustomSection customSection) {
         if (customSections.containsKey(customSection.getName())) {
@@ -112,7 +115,7 @@ public class WasmModule {
         }
     }
 
-    private static class GlobalSorting extends WasmDefaultExpressionVisitor {
+    private static class GlobalSorting extends WasmDefaultInstructionVisitor {
         List<WasmGlobal> sorted = new ArrayList<>();
         private Set<WasmGlobal> visited = new HashSet<>();
 
@@ -126,14 +129,13 @@ public class WasmModule {
             if (!visited.add(global)) {
                 return;
             }
-            global.getInitialValue().acceptVisitor(this);
+            visitMany(global.getInitialValue());
             sorted.add(global);
         }
 
         @Override
-        public void visit(WasmGetGlobal expression) {
-            super.visit(expression);
-            add(expression.getGlobal());
+        public void visit(WasmGetGlobal instruction) {
+            add(instruction.getGlobal());
         }
     }
 

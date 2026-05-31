@@ -46,7 +46,7 @@ public class TReferenceQueue<T> {
         } else {
             var callbackWrapper = new RemoveCallback(callback);
             if (timeout != 0) {
-                callbackWrapper.id = PlatformDetector.isLowLevel()
+                callbackWrapper.id = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
                         ? EventQueue.offer(callbackWrapper, timeout + System.currentTimeMillis())
                         : Platform.schedule(callbackWrapper, (int) timeout);
             }
@@ -87,7 +87,7 @@ public class TReferenceQueue<T> {
 
         @Override
         public void run() {
-            if (PlatformDetector.isLowLevel()) {
+            if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
                 EventQueue.kill(id);
             } else {
                 Platform.killSchedule(id);

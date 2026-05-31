@@ -15,43 +15,33 @@
  */
 package org.teavm.jso.impl.wasmgc;
 
-import org.teavm.backend.wasm.generators.gc.WasmGCCustomGenerator;
-import org.teavm.backend.wasm.generators.gc.WasmGCCustomGeneratorContext;
+import org.teavm.backend.wasm.generate.classes.WasmGCTypeMapper;
+import org.teavm.backend.wasm.intrinsics.WasmGCBodyIntrinsic;
 import org.teavm.backend.wasm.model.WasmFunction;
 import org.teavm.backend.wasm.model.WasmLocal;
-import org.teavm.backend.wasm.model.WasmType;
-import org.teavm.backend.wasm.model.expression.WasmCall;
-import org.teavm.backend.wasm.model.expression.WasmCast;
-import org.teavm.backend.wasm.model.expression.WasmExpression;
-import org.teavm.backend.wasm.model.expression.WasmGetGlobal;
-import org.teavm.backend.wasm.model.expression.WasmGetLocal;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
 
-class WasmGCMarshallMethodGenerator implements WasmGCCustomGenerator {
+class WasmGCMarshallMethodGenerator implements WasmGCBodyIntrinsic {
     private WasmGCJsoCommonGenerator commonGen;
+    private WasmGCTypeMapper typeMapper;
 
-    WasmGCMarshallMethodGenerator(WasmGCJsoCommonGenerator commonGen) {
+    WasmGCMarshallMethodGenerator(WasmGCJsoCommonGenerator commonGen, WasmGCTypeMapper typeMapper) {
         this.commonGen = commonGen;
+        this.typeMapper = typeMapper;
     }
 
     @Override
-    public void apply(MethodReference method, WasmFunction function, WasmGCCustomGeneratorContext context) {
-        var jsoContext = WasmGCJsoContext.wrap(context);
-
-        var thisType = context.typeMapper().mapType(ValueType.object(method.getClassName()));
-        var receiverType = context.isCompactMode()
-                ? WasmType.Reference.ANY
-                : thisType;
-        var thisLocal = new WasmLocal(receiverType, "this");
+    public void apply(MethodReference method, WasmFunction function) {
+        var thisType = typeMapper.mapType(ValueType.object(method.getClassName()));
+        var thisLocal = new WasmLocal(thisType, "this");
         function.add(thisLocal);
 
-        var jsClassGlobal = commonGen.getDefinedClass(jsoContext, method.getClassName());
-        var wrapperFunction = commonGen.javaObjectToJSFunction(jsoContext);
-        WasmExpression thisRef = new WasmGetLocal(thisLocal);
-        if (context.isCompactMode()) {
-            thisRef = new WasmCast(thisRef, (WasmType.Reference) thisType);
-        }
-        function.getBody().add(new WasmCall(wrapperFunction, thisRef, new WasmGetGlobal(jsClassGlobal)));
+        var jsClassGlobal = commonGen.getDefinedClass(method.getClassName());
+        var wrapperFunction = commonGen.javaObjectToJSFunction();
+        var body = function.getBody().builder();
+        body.getLocal(thisLocal);
+        body.getGlobal(jsClassGlobal);
+        body.call(wrapperFunction);
     }
 }

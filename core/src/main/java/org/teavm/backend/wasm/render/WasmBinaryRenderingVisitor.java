@@ -1,5 +1,5 @@
 /*
- *  Copyright 2016 Alexey Andreev.
+ *  Copyright 2024 Alexey Andreev.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,202 +18,152 @@ package org.teavm.backend.wasm.render;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import org.teavm.backend.wasm.debug.DebugLines;
 import org.teavm.backend.wasm.generate.DwarfGenerator;
+import org.teavm.backend.wasm.model.WasmBlockType;
 import org.teavm.backend.wasm.model.WasmModule;
-import org.teavm.backend.wasm.model.WasmType;
-import org.teavm.backend.wasm.model.expression.WasmArrayCopy;
-import org.teavm.backend.wasm.model.expression.WasmArrayGet;
-import org.teavm.backend.wasm.model.expression.WasmArrayLength;
-import org.teavm.backend.wasm.model.expression.WasmArrayNewDefault;
-import org.teavm.backend.wasm.model.expression.WasmArrayNewFixed;
-import org.teavm.backend.wasm.model.expression.WasmArraySet;
-import org.teavm.backend.wasm.model.expression.WasmBlock;
-import org.teavm.backend.wasm.model.expression.WasmBranch;
-import org.teavm.backend.wasm.model.expression.WasmBreak;
-import org.teavm.backend.wasm.model.expression.WasmCall;
-import org.teavm.backend.wasm.model.expression.WasmCallReference;
-import org.teavm.backend.wasm.model.expression.WasmCast;
-import org.teavm.backend.wasm.model.expression.WasmCastBranch;
-import org.teavm.backend.wasm.model.expression.WasmConditional;
-import org.teavm.backend.wasm.model.expression.WasmConversion;
-import org.teavm.backend.wasm.model.expression.WasmCopy;
-import org.teavm.backend.wasm.model.expression.WasmDefaultExpressionVisitor;
-import org.teavm.backend.wasm.model.expression.WasmDrop;
-import org.teavm.backend.wasm.model.expression.WasmExpression;
-import org.teavm.backend.wasm.model.expression.WasmExpressionVisitor;
-import org.teavm.backend.wasm.model.expression.WasmExternConversion;
-import org.teavm.backend.wasm.model.expression.WasmFill;
-import org.teavm.backend.wasm.model.expression.WasmFloat32Constant;
-import org.teavm.backend.wasm.model.expression.WasmFloat64Constant;
-import org.teavm.backend.wasm.model.expression.WasmFloatBinary;
-import org.teavm.backend.wasm.model.expression.WasmFloatUnary;
-import org.teavm.backend.wasm.model.expression.WasmFunctionReference;
-import org.teavm.backend.wasm.model.expression.WasmGetGlobal;
-import org.teavm.backend.wasm.model.expression.WasmGetLocal;
-import org.teavm.backend.wasm.model.expression.WasmIndirectCall;
-import org.teavm.backend.wasm.model.expression.WasmInt31Get;
-import org.teavm.backend.wasm.model.expression.WasmInt31Reference;
-import org.teavm.backend.wasm.model.expression.WasmInt32Constant;
-import org.teavm.backend.wasm.model.expression.WasmInt64Constant;
-import org.teavm.backend.wasm.model.expression.WasmIntBinary;
-import org.teavm.backend.wasm.model.expression.WasmIntUnary;
-import org.teavm.backend.wasm.model.expression.WasmIsNull;
-import org.teavm.backend.wasm.model.expression.WasmLoadFloat32;
-import org.teavm.backend.wasm.model.expression.WasmLoadFloat64;
-import org.teavm.backend.wasm.model.expression.WasmLoadInt32;
-import org.teavm.backend.wasm.model.expression.WasmLoadInt64;
-import org.teavm.backend.wasm.model.expression.WasmMemoryGrow;
-import org.teavm.backend.wasm.model.expression.WasmNullBranch;
-import org.teavm.backend.wasm.model.expression.WasmNullConstant;
-import org.teavm.backend.wasm.model.expression.WasmReferencesEqual;
-import org.teavm.backend.wasm.model.expression.WasmReturn;
-import org.teavm.backend.wasm.model.expression.WasmSetGlobal;
-import org.teavm.backend.wasm.model.expression.WasmSetLocal;
-import org.teavm.backend.wasm.model.expression.WasmSignedType;
-import org.teavm.backend.wasm.model.expression.WasmStoreFloat32;
-import org.teavm.backend.wasm.model.expression.WasmStoreFloat64;
-import org.teavm.backend.wasm.model.expression.WasmStoreInt32;
-import org.teavm.backend.wasm.model.expression.WasmStoreInt64;
-import org.teavm.backend.wasm.model.expression.WasmStructGet;
-import org.teavm.backend.wasm.model.expression.WasmStructNew;
-import org.teavm.backend.wasm.model.expression.WasmStructNewDefault;
-import org.teavm.backend.wasm.model.expression.WasmStructSet;
-import org.teavm.backend.wasm.model.expression.WasmSwitch;
-import org.teavm.backend.wasm.model.expression.WasmTest;
-import org.teavm.backend.wasm.model.expression.WasmThrow;
-import org.teavm.backend.wasm.model.expression.WasmTry;
-import org.teavm.backend.wasm.model.expression.WasmUnreachable;
+import org.teavm.backend.wasm.model.instruction.WasmArrayCopy;
+import org.teavm.backend.wasm.model.instruction.WasmArrayGet;
+import org.teavm.backend.wasm.model.instruction.WasmArrayLength;
+import org.teavm.backend.wasm.model.instruction.WasmArrayNewDefault;
+import org.teavm.backend.wasm.model.instruction.WasmArrayNewFixed;
+import org.teavm.backend.wasm.model.instruction.WasmArraySet;
+import org.teavm.backend.wasm.model.instruction.WasmBlock;
+import org.teavm.backend.wasm.model.instruction.WasmBranch;
+import org.teavm.backend.wasm.model.instruction.WasmBreak;
+import org.teavm.backend.wasm.model.instruction.WasmCall;
+import org.teavm.backend.wasm.model.instruction.WasmCallReference;
+import org.teavm.backend.wasm.model.instruction.WasmCast;
+import org.teavm.backend.wasm.model.instruction.WasmCastBranch;
+import org.teavm.backend.wasm.model.instruction.WasmConditional;
+import org.teavm.backend.wasm.model.instruction.WasmConversion;
+import org.teavm.backend.wasm.model.instruction.WasmCopy;
+import org.teavm.backend.wasm.model.instruction.WasmDrop;
+import org.teavm.backend.wasm.model.instruction.WasmExternConversion;
+import org.teavm.backend.wasm.model.instruction.WasmFill;
+import org.teavm.backend.wasm.model.instruction.WasmFloat32Constant;
+import org.teavm.backend.wasm.model.instruction.WasmFloat64Constant;
+import org.teavm.backend.wasm.model.instruction.WasmFloatBinary;
+import org.teavm.backend.wasm.model.instruction.WasmFloatUnary;
+import org.teavm.backend.wasm.model.instruction.WasmFunctionReference;
+import org.teavm.backend.wasm.model.instruction.WasmGetGlobal;
+import org.teavm.backend.wasm.model.instruction.WasmGetLocal;
+import org.teavm.backend.wasm.model.instruction.WasmIndirectCall;
+import org.teavm.backend.wasm.model.instruction.WasmInstruction;
+import org.teavm.backend.wasm.model.instruction.WasmInstructionList;
+import org.teavm.backend.wasm.model.instruction.WasmInstructionVisitor;
+import org.teavm.backend.wasm.model.instruction.WasmInt31Get;
+import org.teavm.backend.wasm.model.instruction.WasmInt31Reference;
+import org.teavm.backend.wasm.model.instruction.WasmInt32Constant;
+import org.teavm.backend.wasm.model.instruction.WasmInt64Constant;
+import org.teavm.backend.wasm.model.instruction.WasmIntBinary;
+import org.teavm.backend.wasm.model.instruction.WasmIntUnary;
+import org.teavm.backend.wasm.model.instruction.WasmIsNull;
+import org.teavm.backend.wasm.model.instruction.WasmLoadFloat32;
+import org.teavm.backend.wasm.model.instruction.WasmLoadFloat64;
+import org.teavm.backend.wasm.model.instruction.WasmLoadInt32;
+import org.teavm.backend.wasm.model.instruction.WasmLoadInt64;
+import org.teavm.backend.wasm.model.instruction.WasmMemoryGrow;
+import org.teavm.backend.wasm.model.instruction.WasmNullBranch;
+import org.teavm.backend.wasm.model.instruction.WasmNullConstant;
+import org.teavm.backend.wasm.model.instruction.WasmReferencesEqual;
+import org.teavm.backend.wasm.model.instruction.WasmReturn;
+import org.teavm.backend.wasm.model.instruction.WasmSetGlobal;
+import org.teavm.backend.wasm.model.instruction.WasmSetLocal;
+import org.teavm.backend.wasm.model.instruction.WasmSignedType;
+import org.teavm.backend.wasm.model.instruction.WasmStoreFloat32;
+import org.teavm.backend.wasm.model.instruction.WasmStoreFloat64;
+import org.teavm.backend.wasm.model.instruction.WasmStoreInt32;
+import org.teavm.backend.wasm.model.instruction.WasmStoreInt64;
+import org.teavm.backend.wasm.model.instruction.WasmStructGet;
+import org.teavm.backend.wasm.model.instruction.WasmStructNew;
+import org.teavm.backend.wasm.model.instruction.WasmStructNewDefault;
+import org.teavm.backend.wasm.model.instruction.WasmStructSet;
+import org.teavm.backend.wasm.model.instruction.WasmSwitch;
+import org.teavm.backend.wasm.model.instruction.WasmTeeLocal;
+import org.teavm.backend.wasm.model.instruction.WasmTest;
+import org.teavm.backend.wasm.model.instruction.WasmThrow;
+import org.teavm.backend.wasm.model.instruction.WasmTry;
+import org.teavm.backend.wasm.model.instruction.WasmUnreachable;
 import org.teavm.model.InliningInfo;
 import org.teavm.model.TextLocation;
 
-class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
-    private WasmBinaryWriter writer;
-    private WasmModule module;
-    private DwarfGenerator dwarfGenerator;
-    private DebugLines debugLines;
-    private int addressOffset;
+class WasmBinaryRenderingVisitor implements WasmInstructionVisitor {
+    private final WasmBinaryWriter writer;
+    private final WasmModule module;
+    private final DebugLines debugLines;
+    private final DwarfGenerator dwarfGenerator;
     private int depth;
-    private Map<WasmBlock, Integer> blockDepths = new HashMap<>();
+    private final Map<WasmInstruction, Integer> blockDepths = new HashMap<>();
+
+    private TextLocation lastEmittedLocation;
+    private int addressOffset;
     private List<InliningInfo> methodStack = new ArrayList<>();
     private List<InliningInfo> currentMethodStack = new ArrayList<>();
-    private TextLocation textLocationToEmit;
-    private boolean deferTextLocationToEmit;
-    private TextLocation lastEmittedLocation;
-    private int positionToEmit;
-    private List<TextLocation> locationStack = new ArrayList<>();
-    private Set<WasmBlock> blocksToPreserve = new HashSet<>();
 
-    WasmBinaryRenderingVisitor(WasmBinaryWriter writer, WasmModule module,
-            DwarfGenerator dwarfGenerator, DebugLines debugLines, int addressOffset) {
+    WasmBinaryRenderingVisitor(WasmBinaryWriter writer, WasmModule module, DebugLines debugLines,
+            DwarfGenerator dwarfGenerator, int addressOffset) {
         this.writer = writer;
         this.module = module;
+        this.debugLines = debugLines;
         this.dwarfGenerator = dwarfGenerator;
         this.addressOffset = addressOffset;
-        this.debugLines = debugLines;
     }
 
-    public void setPositionToEmit(int positionToEmit) {
-        this.positionToEmit = positionToEmit;
-    }
 
-    void preprocess(WasmExpression expression) {
-        expression.acceptVisitor(new WasmDefaultExpressionVisitor() {
-            @Override
-            public void visit(WasmBranch expression) {
-                super.visit(expression);
-                register(expression.getTarget());
-            }
-
-            @Override
-            public void visit(WasmNullBranch expression) {
-                super.visit(expression);
-                register(expression.getTarget());
-            }
-
-            @Override
-            public void visit(WasmCastBranch expression) {
-                super.visit(expression);
-                register(expression.getTarget());
-            }
-
-            @Override
-            public void visit(WasmBreak expression) {
-                super.visit(expression);
-                register(expression.getTarget());
-            }
-
-            @Override
-            public void visit(WasmSwitch expression) {
-                super.visit(expression);
-                for (WasmBlock target : expression.getTargets()) {
-                    register(target);
-                }
-                register(expression.getDefaultTarget());
-            }
-
-            private void register(WasmBlock block) {
-                blocksToPreserve.add(block);
-            }
-        });
-    }
-
-    @Override
-    public void visit(WasmBlock expression) {
-        if (blocksToPreserve.contains(expression) || expression.isLoop()) {
-            pushLocation(expression);
-            pushLocation(expression);
-            int blockDepth = 1;
-            depth += blockDepth;
-            blockDepths.put(expression, depth);
-            writer.writeByte(expression.isLoop() ? 0x03 : 0x02);
-            writeBlockType(expression.getType());
-            for (WasmExpression part : expression.getBody()) {
-                part.acceptVisitor(this);
-            }
-            popLocation();
-            writer.writeByte(0x0B);
-            popLocation();
-            blockDepths.remove(expression);
-            depth -= blockDepth;
-        } else {
-            pushLocation(expression);
-            for (var part : expression.getBody()) {
-                part.acceptVisitor(this);
-            }
-            popLocation();
+    void render(WasmInstructionList list) {
+        for (var instruction : list) {
+            instruction.acceptVisitor(this);
         }
     }
 
-    private void writeBlockType(WasmType type) {
-        writer.writeType(type, module);
+    @Override
+    public void visit(WasmUnreachable instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0x00);
     }
 
     @Override
-    public void visit(WasmBranch expression) {
-        pushLocation(expression);
-        if (expression.getResult() != null) {
-            expression.getResult().acceptVisitor(this);
+    public void visit(WasmBlock instruction) {
+        ++depth;
+        blockDepths.put(instruction, depth);
+        writer.writeByte(instruction.isLoop() ? 0x03 : 0x02);
+        writeBlockType(instruction.getType());
+        render(instruction.getBody());
+        writer.writeByte(0x0B);
+        blockDepths.remove(instruction);
+        --depth;
+    }
+
+    @Override
+    public void visit(WasmConditional instruction) {
+        writer.writeByte(0x04);
+        writeBlockType(instruction.getType());
+        ++depth;
+        blockDepths.put(instruction, depth);
+        render(instruction.getThenBlock());
+        if (!instruction.getElseBlock().isEmpty()) {
+            writer.writeByte(0x05);
+            render(instruction.getElseBlock());
         }
-        expression.getCondition().acceptVisitor(this);
+        blockDepths.remove(instruction);
+        --depth;
+        writer.writeByte(0x0B);
+    }
+
+    @Override
+    public void visit(WasmBranch instruction) {
         writer.writeByte(0x0D);
-        writeLabel(expression.getTarget());
-        popLocation();
+        writeLabel(instruction, instruction.getTarget());
     }
 
     @Override
-    public void visit(WasmNullBranch expression) {
-        pushLocation(expression);
-        if (expression.getResult() != null) {
-            expression.getResult().acceptVisitor(this);
-        }
-        expression.getValue().acceptVisitor(this);
-        switch (expression.getCondition()) {
+    public void visit(WasmNullBranch instruction) {
+        emitLocation(instruction);
+        switch (instruction.getCondition()) {
             case NULL:
                 writer.writeByte(0xD5);
                 break;
@@ -221,19 +171,14 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 writer.writeByte(0xD6);
                 break;
         }
-        writeLabel(expression.getTarget());
-        popLocation();
+        writeLabel(instruction, instruction.getTarget());
     }
 
     @Override
-    public void visit(WasmCastBranch expression) {
-        pushLocation(expression);
-        if (expression.getResult() != null) {
-            expression.getResult().acceptVisitor(this);
-        }
-        expression.getValue().acceptVisitor(this);
+    public void visit(WasmCastBranch instruction) {
+        emitLocation(instruction);
         writer.writeByte(0xFB);
-        switch (expression.getCondition()) {
+        switch (instruction.getCondition()) {
             case SUCCESS:
                 writer.writeByte(24);
                 break;
@@ -242,192 +187,124 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 break;
         }
         var flags = 0;
-        if (expression.getSourceType().isNullable()) {
+        if (instruction.getSourceType().isNullable()) {
             flags |= 1;
         }
-        if (expression.getType().isNullable()) {
+        if (instruction.getTargetType().isNullable()) {
             flags |= 2;
         }
         writer.writeByte(flags);
-        writeLabel(expression.getTarget());
-        writer.writeHeapType(expression.getSourceType(), module);
-        writer.writeHeapType(expression.getType(), module);
-        popLocation();
+        writeLabel(instruction, instruction.getTarget());
+        writer.writeHeapType(instruction.getSourceType(), module);
+        writer.writeHeapType(instruction.getTargetType(), module);
     }
 
     @Override
-    public void visit(WasmBreak expression) {
-        pushLocation(expression);
-        if (expression.getResult() != null) {
-            expression.getResult().acceptVisitor(this);
-        }
+    public void visit(WasmBreak instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x0C);
-        writeLabel(expression.getTarget());
-        popLocation();
+        writeLabel(instruction, instruction.getTarget());
     }
 
     @Override
-    public void visit(WasmSwitch expression) {
-        pushLocation(expression);
-        expression.getSelector().acceptVisitor(this);
-
+    public void visit(WasmSwitch instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x0E);
-
-        writer.writeLEB(expression.getTargets().size());
-        for (WasmBlock target : expression.getTargets()) {
-            int targetDepth = blockDepths.get(target);
-            int relativeDepth = depth - targetDepth;
-            writer.writeLEB(relativeDepth);
+        writer.writeLEB(instruction.getTargets().size());
+        for (var target : instruction.getTargets()) {
+            writeLabel(instruction, target);
         }
-
-        int defaultDepth = blockDepths.get(expression.getDefaultTarget());
-        int relativeDepth = depth - defaultDepth;
-        writer.writeLEB(relativeDepth);
-        popLocation();
+        writer.writeLEB(depth - blockDepths.get(instruction.getDefaultTarget().getBreakTarget()));
     }
 
     @Override
-    public void visit(WasmConditional expression) {
-        pushLocation(expression);
-        pushLocation(expression);
-        expression.getCondition().acceptVisitor(this);
-        writer.writeByte(0x04);
-        writeBlockType(expression.getType());
-
-        ++depth;
-        blockDepths.put(expression.getThenBlock(), depth);
-        for (WasmExpression part : expression.getThenBlock().getBody()) {
-            part.acceptVisitor(this);
-        }
-        blockDepths.remove(expression.getThenBlock());
-
-        if (!expression.getElseBlock().getBody().isEmpty()) {
-            writer.writeByte(0x05);
-            blockDepths.put(expression.getElseBlock(), depth);
-            for (WasmExpression part : expression.getElseBlock().getBody()) {
-                part.acceptVisitor(this);
-            }
-            blockDepths.remove(expression.getElseBlock());
-        }
-        --depth;
-
-        popLocation();
-        writer.writeByte(0x0B);
-        popLocation();
-    }
-
-    @Override
-    public void visit(WasmReturn expression) {
-        pushLocation(expression);
-        if (expression.getValue() != null) {
-            expression.getValue().acceptVisitor(this);
-        }
+    public void visit(WasmReturn instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x0F);
-        popLocation();
     }
 
     @Override
-    public void visit(WasmUnreachable expression) {
-        pushLocation(expression);
-        writer.writeByte(0x0);
-        popLocation();
-    }
-
-    @Override
-    public void visit(WasmInt32Constant expression) {
-        pushLocation(expression);
+    public void visit(WasmInt32Constant instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x41);
-        writer.writeSignedLEB(expression.getValue());
-        popLocation();
+        writer.writeSignedLEB(instruction.getValue());
     }
 
     @Override
-    public void visit(WasmInt64Constant expression) {
-        pushLocation(expression);
+    public void visit(WasmInt64Constant instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x42);
-        writer.writeSignedLEB(expression.getValue());
-        popLocation();
+        writer.writeSignedLEB(instruction.getValue());
     }
 
     @Override
-    public void visit(WasmFloat32Constant expression) {
-        pushLocation(expression);
+    public void visit(WasmFloat32Constant instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x43);
-        writer.writeFixed(Float.floatToRawIntBits(expression.getValue()));
-        popLocation();
+        writer.writeFixed(Float.floatToRawIntBits(instruction.getValue()));
     }
 
     @Override
-    public void visit(WasmFloat64Constant expression) {
-        pushLocation(expression);
+    public void visit(WasmFloat64Constant instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x44);
-        writer.writeFixed(Double.doubleToRawLongBits(expression.getValue()));
-        popLocation();
+        writer.writeFixed(Double.doubleToRawLongBits(instruction.getValue()));
     }
 
     @Override
-    public void visit(WasmNullConstant expression) {
-        pushLocation(expression);
+    public void visit(WasmNullConstant instruction) {
+        emitLocation(instruction);
         writer.writeByte(0xD0);
-        writer.writeHeapType(expression.getType(), module);
-        popLocation();
+        writer.writeHeapType(instruction.getType(), module);
     }
 
     @Override
-    public void visit(WasmIsNull expression) {
-        pushLocation(expression);
-        expression.getValue().acceptVisitor(this);
+    public void visit(WasmIsNull instruction) {
+        emitLocation(instruction);
         writer.writeByte(0xD1);
-        popLocation();
     }
 
     @Override
-    public void visit(WasmGetLocal expression) {
-        pushLocation(expression);
+    public void visit(WasmGetLocal instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x20);
-        writer.writeLEB(expression.getLocal().getIndex());
-        popLocation();
+        writer.writeLEB(instruction.getLocal().getIndex());
     }
 
     @Override
-    public void visit(WasmSetLocal expression) {
-        pushLocation(expression);
-        expression.getValue().acceptVisitor(this);
+    public void visit(WasmSetLocal instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x21);
-        writer.writeLEB(expression.getLocal().getIndex());
-        popLocation();
+        writer.writeLEB(instruction.getLocal().getIndex());
     }
 
     @Override
-    public void visit(WasmGetGlobal expression) {
-        pushLocation(expression);
+    public void visit(WasmTeeLocal instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0x22);
+        writer.writeLEB(instruction.getLocal().getIndex());
+    }
+
+    @Override
+    public void visit(WasmGetGlobal instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x23);
-        writer.writeLEB(module.globals.indexOf(expression.getGlobal()));
-        popLocation();
+        writer.writeLEB(module.globals.indexOf(instruction.getGlobal()));
     }
 
     @Override
-    public void visit(WasmSetGlobal expression) {
-        pushLocation(expression);
-        expression.getValue().acceptVisitor(this);
+    public void visit(WasmSetGlobal instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x24);
-        writer.writeLEB(module.globals.indexOf(expression.getGlobal()));
-        popLocation();
+        writer.writeLEB(module.globals.indexOf(instruction.getGlobal()));
     }
 
     @Override
-    public void visit(WasmIntBinary expression) {
-        pushLocation(expression);
-        expression.getFirst().acceptVisitor(this);
-        expression.getSecond().acceptVisitor(this);
-        render0xD(expression);
-        popLocation();
-    }
-
-    private void render0xD(WasmIntBinary expression) {
-        switch (expression.getType()) {
+    public void visit(WasmIntBinary instruction) {
+        emitLocation(instruction);
+        switch (instruction.getType()) {
             case INT32:
-                switch (expression.getOperation()) {
+                switch (instruction.getOperation()) {
                     case ADD:
                         writer.writeByte(0x6A);
                         break;
@@ -506,7 +383,7 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 }
                 break;
             case INT64:
-                switch (expression.getOperation()) {
+                switch (instruction.getOperation()) {
                     case ADD:
                         writer.writeByte(0x7C);
                         break;
@@ -588,18 +465,11 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
     }
 
     @Override
-    public void visit(WasmFloatBinary expression) {
-        pushLocation(expression);
-        expression.getFirst().acceptVisitor(this);
-        expression.getSecond().acceptVisitor(this);
-        render0xD(expression);
-        popLocation();
-    }
-
-    private void render0xD(WasmFloatBinary expression) {
-        switch (expression.getType()) {
+    public void visit(WasmFloatBinary instruction) {
+        emitLocation(instruction);
+        switch (instruction.getType()) {
             case FLOAT32:
-                switch (expression.getOperation()) {
+                switch (instruction.getOperation()) {
                     case ADD:
                         writer.writeByte(0x92);
                         break;
@@ -639,7 +509,7 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 }
                 break;
             case FLOAT64:
-                switch (expression.getOperation()) {
+                switch (instruction.getOperation()) {
                     case ADD:
                         writer.writeByte(0xA0);
                         break;
@@ -682,12 +552,11 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
     }
 
     @Override
-    public void visit(WasmIntUnary expression) {
-        pushLocation(expression);
-        expression.getOperand().acceptVisitor(this);
-        switch (expression.getType()) {
+    public void visit(WasmIntUnary instruction) {
+        emitLocation(instruction);
+        switch (instruction.getType()) {
             case INT32:
-                switch (expression.getOperation()) {
+                switch (instruction.getOperation()) {
                     case EQZ:
                         writer.writeByte(0x45);
                         break;
@@ -703,7 +572,7 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 }
                 break;
             case INT64:
-                switch (expression.getOperation()) {
+                switch (instruction.getOperation()) {
                     case EQZ:
                         writer.writeByte(0x50);
                         break;
@@ -719,21 +588,14 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 }
                 break;
         }
-        popLocation();
     }
 
     @Override
-    public void visit(WasmFloatUnary expression) {
-        pushLocation(expression);
-        expression.getOperand().acceptVisitor(this);
-        render0xD(expression);
-        popLocation();
-    }
-
-    private void render0xD(WasmFloatUnary expression) {
-        switch (expression.getType()) {
+    public void visit(WasmFloatUnary instruction) {
+        emitLocation(instruction);
+        switch (instruction.getType()) {
             case FLOAT32:
-                switch (expression.getOperation()) {
+                switch (instruction.getOperation()) {
                     case ABS:
                         writer.writeByte(0x8B);
                         break;
@@ -761,7 +623,7 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 }
                 break;
             case FLOAT64:
-                switch (expression.getOperation()) {
+                switch (instruction.getOperation()) {
                     case ABS:
                         writer.writeByte(0x99);
                         break;
@@ -792,66 +654,65 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
     }
 
     @Override
-    public void visit(WasmConversion expression) {
-        pushLocation(expression);
-        expression.getOperand().acceptVisitor(this);
-        switch (expression.getSourceType()) {
+    public void visit(WasmConversion instruction) {
+        emitLocation(instruction);
+        switch (instruction.getSourceType()) {
             case INT32:
-                switch (expression.getTargetType()) {
+                switch (instruction.getTargetType()) {
                     case INT32:
                         break;
                     case INT64:
-                        writer.writeByte(expression.isSigned() ? 0xAC : 0xAD);
+                        writer.writeByte(instruction.isSigned() ? 0xAC : 0xAD);
                         break;
                     case FLOAT32:
-                        if (expression.isReinterpret()) {
+                        if (instruction.isReinterpret()) {
                             writer.writeByte(0xBE);
                         } else {
-                            writer.writeByte(expression.isSigned() ? 0xB2 : 0xB3);
+                            writer.writeByte(instruction.isSigned() ? 0xB2 : 0xB3);
                         }
                         break;
                     case FLOAT64:
-                        writer.writeByte(expression.isSigned() ? 0xB7 : 0xB8);
+                        writer.writeByte(instruction.isSigned() ? 0xB7 : 0xB8);
                         break;
                 }
                 break;
             case INT64:
-                switch (expression.getTargetType()) {
+                switch (instruction.getTargetType()) {
                     case INT32:
                         writer.writeByte(0xA7);
                         break;
                     case INT64:
                         break;
                     case FLOAT32:
-                        writer.writeByte(expression.isSigned() ? 0xB4 : 0xB5);
+                        writer.writeByte(instruction.isSigned() ? 0xB4 : 0xB5);
                         break;
                     case FLOAT64:
-                        if (expression.isReinterpret()) {
+                        if (instruction.isReinterpret()) {
                             writer.writeByte(0xBF);
                         } else {
-                            writer.writeByte(expression.isSigned() ? 0xB9 : 0xBA);
+                            writer.writeByte(instruction.isSigned() ? 0xB9 : 0xBA);
                         }
                         break;
                 }
                 break;
             case FLOAT32:
-                switch (expression.getTargetType()) {
+                switch (instruction.getTargetType()) {
                     case INT32:
-                        if (expression.isReinterpret()) {
+                        if (instruction.isReinterpret()) {
                             writer.writeByte(0xBC);
-                        } else if (expression.isNonTrapping()) {
+                        } else if (instruction.isNonTrapping()) {
                             writer.writeByte(0xFC);
-                            writer.writeByte(expression.isSigned() ? 0 : 1);
+                            writer.writeByte(instruction.isSigned() ? 0 : 1);
                         } else {
-                            writer.writeByte(expression.isSigned() ? 0xA8 : 0xA9);
+                            writer.writeByte(instruction.isSigned() ? 0xA8 : 0xA9);
                         }
                         break;
                     case INT64:
-                        if (expression.isNonTrapping()) {
+                        if (instruction.isNonTrapping()) {
                             writer.writeByte(0xFC);
-                            writer.writeByte(expression.isSigned() ? 4 : 5);
+                            writer.writeByte(instruction.isSigned() ? 4 : 5);
                         } else {
-                            writer.writeByte(expression.isSigned() ? 0xAE : 0xAF);
+                            writer.writeByte(instruction.isSigned() ? 0xAE : 0xAF);
                         }
                         break;
                     case FLOAT32:
@@ -862,23 +723,23 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 }
                 break;
             case FLOAT64:
-                switch (expression.getTargetType()) {
+                switch (instruction.getTargetType()) {
                     case INT32:
-                        if (expression.isNonTrapping()) {
+                        if (instruction.isNonTrapping()) {
                             writer.writeByte(0xFC);
-                            writer.writeByte(expression.isSigned() ? 2 : 3);
+                            writer.writeByte(instruction.isSigned() ? 2 : 3);
                         } else {
-                            writer.writeByte(expression.isSigned() ? 0xAA : 0xAB);
+                            writer.writeByte(instruction.isSigned() ? 0xAA : 0xAB);
                         }
                         break;
                     case INT64:
-                        if (expression.isReinterpret()) {
+                        if (instruction.isReinterpret()) {
                             writer.writeByte(0xBD);
-                        } else if (expression.isNonTrapping()) {
+                        } else if (instruction.isNonTrapping()) {
                             writer.writeByte(0xFC);
-                            writer.writeByte(expression.isSigned() ? 6 : 7);
+                            writer.writeByte(instruction.isSigned() ? 6 : 7);
                         } else {
-                            writer.writeByte(expression.isSigned() ? 0xB0 : 0xB1);
+                            writer.writeByte(instruction.isSigned() ? 0xB0 : 0xB1);
                         }
                         break;
                     case FLOAT32:
@@ -889,61 +750,40 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 }
                 break;
         }
-        popLocation();
     }
 
     @Override
-    public void visit(WasmCall expression) {
-        pushLocation(expression);
-        for (WasmExpression argument : expression.getArguments()) {
-            argument.acceptVisitor(this);
-        }
-        var functionIndex = module.functions.indexOf(expression.getFunction());
-
+    public void visit(WasmCall instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x10);
-        writer.writeLEB(functionIndex);
-        popLocation();
+        writer.writeLEB(module.functions.indexOf(instruction.getFunction()));
     }
 
     @Override
-    public void visit(WasmIndirectCall expression) {
-        pushLocation(expression);
-        for (WasmExpression argument : expression.getArguments()) {
-            argument.acceptVisitor(this);
-        }
-        expression.getSelector().acceptVisitor(this);
+    public void visit(WasmIndirectCall instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x11);
-        writer.writeLEB(module.types.indexOf(expression.getType()));
-
+        writer.writeLEB(module.types.indexOf(instruction.getType()));
         writer.writeByte(0);
-        popLocation();
     }
 
     @Override
-    public void visit(WasmCallReference expression) {
-        pushLocation(expression);
-        for (var argument : expression.getArguments()) {
-            argument.acceptVisitor(this);
-        }
-        expression.getFunctionReference().acceptVisitor(this);
+    public void visit(WasmCallReference instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x14);
-        writer.writeLEB(module.types.indexOf(expression.getType()));
-        popLocation();
+        writer.writeLEB(module.types.indexOf(instruction.getType()));
     }
 
     @Override
-    public void visit(WasmDrop expression) {
-        pushLocation(expression);
-        expression.getOperand().acceptVisitor(this);
+    public void visit(WasmDrop instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x1A);
-        popLocation();
     }
 
     @Override
-    public void visit(WasmLoadInt32 expression) {
-        pushLocation(expression);
-        expression.getIndex().acceptVisitor(this);
-        switch (expression.getConvertFrom()) {
+    public void visit(WasmLoadInt32 instruction) {
+        emitLocation(instruction);
+        switch (instruction.getConvertFrom()) {
             case INT8:
                 writer.writeByte(0x2C);
                 break;
@@ -960,16 +800,14 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 writer.writeByte(0x28);
                 break;
         }
-        writer.writeByte(alignment(expression.getAlignment()));
-        writer.writeLEB(expression.getOffset());
-        popLocation();
+        writer.writeByte(alignment(instruction.getAlignment()));
+        writer.writeLEB(instruction.getOffset());
     }
 
     @Override
-    public void visit(WasmLoadInt64 expression) {
-        pushLocation(expression);
-        expression.getIndex().acceptVisitor(this);
-        switch (expression.getConvertFrom()) {
+    public void visit(WasmLoadInt64 instruction) {
+        emitLocation(instruction);
+        switch (instruction.getConvertFrom()) {
             case INT8:
                 writer.writeByte(0x30);
                 break;
@@ -992,37 +830,30 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 writer.writeByte(0x29);
                 break;
         }
-        writer.writeByte(alignment(expression.getAlignment()));
-        writer.writeLEB(expression.getOffset());
-        popLocation();
+        writer.writeByte(alignment(instruction.getAlignment()));
+        writer.writeLEB(instruction.getOffset());
     }
 
     @Override
-    public void visit(WasmLoadFloat32 expression) {
-        pushLocation(expression);
-        expression.getIndex().acceptVisitor(this);
+    public void visit(WasmLoadFloat32 instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x2A);
-        writer.writeByte(alignment(expression.getAlignment()));
-        writer.writeLEB(expression.getOffset());
-        popLocation();
+        writer.writeByte(alignment(instruction.getAlignment()));
+        writer.writeLEB(instruction.getOffset());
     }
 
     @Override
-    public void visit(WasmLoadFloat64 expression) {
-        pushLocation(expression);
-        expression.getIndex().acceptVisitor(this);
+    public void visit(WasmLoadFloat64 instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x2B);
-        writer.writeByte(alignment(expression.getAlignment()));
-        writer.writeLEB(expression.getOffset());
-        popLocation();
+        writer.writeByte(alignment(instruction.getAlignment()));
+        writer.writeLEB(instruction.getOffset());
     }
 
     @Override
-    public void visit(WasmStoreInt32 expression) {
-        pushLocation(expression);
-        expression.getIndex().acceptVisitor(this);
-        expression.getValue().acceptVisitor(this);
-        switch (expression.getConvertTo()) {
+    public void visit(WasmStoreInt32 instruction) {
+        emitLocation(instruction);
+        switch (instruction.getConvertTo()) {
             case INT8:
             case UINT8:
                 writer.writeByte(0x3A);
@@ -1035,17 +866,14 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 writer.writeByte(0x36);
                 break;
         }
-        writer.writeByte(alignment(expression.getAlignment()));
-        writer.writeLEB(expression.getOffset());
-        popLocation();
+        writer.writeByte(alignment(instruction.getAlignment()));
+        writer.writeLEB(instruction.getOffset());
     }
 
     @Override
-    public void visit(WasmStoreInt64 expression) {
-        pushLocation(expression);
-        expression.getIndex().acceptVisitor(this);
-        expression.getValue().acceptVisitor(this);
-        switch (expression.getConvertTo()) {
+    public void visit(WasmStoreInt64 instruction) {
+        emitLocation(instruction);
+        switch (instruction.getConvertTo()) {
             case INT8:
             case UINT8:
                 writer.writeByte(0x3C);
@@ -1062,142 +890,118 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 writer.writeByte(0x37);
                 break;
         }
-        writer.writeByte(alignment(expression.getAlignment()));
-        writer.writeLEB(expression.getOffset());
-        popLocation();
+        writer.writeByte(alignment(instruction.getAlignment()));
+        writer.writeLEB(instruction.getOffset());
     }
 
     @Override
-    public void visit(WasmStoreFloat32 expression) {
-        pushLocation(expression);
-        expression.getIndex().acceptVisitor(this);
-        expression.getValue().acceptVisitor(this);
+    public void visit(WasmStoreFloat32 instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x38);
-        writer.writeByte(alignment(expression.getAlignment()));
-        writer.writeLEB(expression.getOffset());
-        popLocation();
+        writer.writeByte(alignment(instruction.getAlignment()));
+        writer.writeLEB(instruction.getOffset());
     }
 
     @Override
-    public void visit(WasmStoreFloat64 expression) {
-        pushLocation(expression);
-        expression.getIndex().acceptVisitor(this);
-        expression.getValue().acceptVisitor(this);
+    public void visit(WasmStoreFloat64 instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x39);
-        writer.writeByte(alignment(expression.getAlignment()));
-        writer.writeLEB(expression.getOffset());
-        popLocation();
+        writer.writeByte(alignment(instruction.getAlignment()));
+        writer.writeLEB(instruction.getOffset());
     }
 
     @Override
-    public void visit(WasmMemoryGrow expression) {
-        pushLocation(expression);
-        expression.getAmount().acceptVisitor(this);
+    public void visit(WasmMemoryGrow instruction) {
+        emitLocation(instruction);
         writer.writeByte(0x40);
         writer.writeByte(0);
-        popLocation();
     }
 
     @Override
-    public void visit(WasmFill expression) {
-        pushLocation(expression);
-        expression.getIndex().acceptVisitor(this);
-        expression.getValue().acceptVisitor(this);
-        expression.getCount().acceptVisitor(this);
+    public void visit(WasmFill instruction) {
+        emitLocation(instruction);
         writer.writeByte(0xFC);
         writer.writeLEB(11);
         writer.writeByte(0);
-        popLocation();
     }
 
     @Override
-    public void visit(WasmCopy expression) {
-        pushLocation(expression);
-        expression.getDestinationIndex().acceptVisitor(this);
-        expression.getSourceIndex().acceptVisitor(this);
-        expression.getCount().acceptVisitor(this);
+    public void visit(WasmCopy instruction) {
+        emitLocation(instruction);
         writer.writeByte(0xFC);
         writer.writeLEB(10);
         writer.writeByte(0);
         writer.writeByte(0);
-        popLocation();
     }
 
     @Override
-    public void visit(WasmTry expression) {
-        pushLocation(expression);
-        writer.writeByte(0x06);
-        writeBlockType(expression.getType());
-        ++depth;
-        for (var part : expression.getBody()) {
-            part.acceptVisitor(this);
-        }
-        --depth;
-        for (var catchClause : expression.getCatches()) {
-            writer.writeByte(0x07);
-            writer.writeLEB(catchClause.getTag().getIndex());
-            for (var catchVar : catchClause.getCatchVariables()) {
-                if (catchVar == null) {
-                    writer.writeByte(0x1A);
+    public void visit(WasmTry instruction) {
+        writer.writeByte(0x1F);
+        writer.writeType(instruction.getType(), module);
+        writer.writeLEB(instruction.getCatches().size());
+        for (var catchClause : instruction.getCatches()) {
+            if (catchClause.getTag() != null) {
+                if (!catchClause.isRef()) {
+                    writer.writeByte(0x00);
                 } else {
-                    writer.writeByte(0x21);
-                    writer.writeLEB(catchVar.getIndex());
+                    writer.writeByte(0x01);
+                }
+                writer.writeLEB(catchClause.getTag().getIndex());
+            } else {
+                if (!catchClause.isRef()) {
+                    writer.writeByte(0x02);
+                } else {
+                    writer.writeByte(0x03);
                 }
             }
-            for (var part : catchClause.getBody()) {
-                part.acceptVisitor(this);
-            }
+            writeLabel(instruction, catchClause.getTarget());
         }
-        writer.writeByte(0xB);
-        popLocation();
+        ++depth;
+        blockDepths.put(instruction, depth);
+        render(instruction.getBody());
+        blockDepths.remove(instruction);
+        --depth;
+        writer.writeByte(0x0B);
     }
 
     @Override
-    public void visit(WasmThrow expression) {
-        pushLocation(expression);
-        for (var arg : expression.getArguments()) {
-            arg.acceptVisitor(this);
+    public void visit(WasmThrow instruction) {
+        emitLocation(instruction);
+        if (instruction.getTag() != null) {
+            writer.writeByte(0x08);
+            writer.writeLEB(instruction.getTag().getIndex());
+        } else {
+            writer.writeByte(0x0A);
         }
-        writer.writeByte(0x8);
-        writer.writeLEB(expression.getTag().getIndex());
-        popLocation();
     }
 
     @Override
-    public void visit(WasmReferencesEqual expression) {
-        pushLocation(expression);
-        expression.getFirst().acceptVisitor(this);
-        expression.getSecond().acceptVisitor(this);
-        writer.writeByte(0xd3);
-        popLocation();
+    public void visit(WasmReferencesEqual instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xD3);
     }
 
     @Override
-    public void visit(WasmCast expression) {
-        pushLocation(expression);
-        expression.getValue().acceptVisitor(this);
-        writer.writeByte(0xfb);
-        writer.writeByte(expression.getTargetType().isNullable() ? 23 : 22);
-        writer.writeHeapType(expression.getTargetType(), module);
-        popLocation();
+    public void visit(WasmCast instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
+        writer.writeByte(instruction.getTargetType().isNullable() ? 23 : 22);
+        writer.writeHeapType(instruction.getTargetType(), module);
     }
 
     @Override
-    public void visit(WasmTest expression) {
-        pushLocation(expression);
-        expression.getValue().acceptVisitor(this);
-        writer.writeByte(0xfb);
-        writer.writeByte(expression.getTestType().isNullable() ? 21 : 20);
-        writer.writeHeapType(expression.getTestType(), module);
-        popLocation();
+    public void visit(WasmTest instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
+        writer.writeByte(instruction.getTestType().isNullable() ? 21 : 20);
+        writer.writeHeapType(instruction.getTestType(), module);
     }
 
     @Override
-    public void visit(WasmExternConversion expression) {
-        pushLocation(expression);
-        expression.getValue().acceptVisitor(this);
-        writer.writeByte(0xfb);
-        switch (expression.getType()) {
+    public void visit(WasmExternConversion instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
+        switch (instruction.getType()) {
             case EXTERN_TO_ANY:
                 writer.writeByte(26);
                 break;
@@ -1205,39 +1009,32 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                 writer.writeByte(27);
                 break;
         }
-        popLocation();
     }
 
     @Override
-    public void visit(WasmStructNew expression) {
-        pushLocation(expression);
-        for (var initializer : expression.getInitializers()) {
-            initializer.acceptVisitor(this);
-        }
-        writer.writeByte(0xfb);
+    public void visit(WasmStructNew instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
         writer.writeByte(0);
-        writer.writeLEB(module.types.indexOf(expression.getType()));
-        popLocation();
+        writer.writeLEB(module.types.indexOf(instruction.getType()));
     }
 
     @Override
-    public void visit(WasmStructNewDefault expression) {
-        pushLocation(expression);
-        writer.writeByte(0xfb);
+    public void visit(WasmStructNewDefault instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
         writer.writeByte(1);
-        writer.writeLEB(module.types.indexOf(expression.getType()));
-        popLocation();
+        writer.writeLEB(module.types.indexOf(instruction.getType()));
     }
 
     @Override
-    public void visit(WasmStructGet expression) {
-        pushLocation(expression);
-        expression.getInstance().acceptVisitor(this);
-        writer.writeByte(0xfb);
-        if (expression.getSignedType() == null) {
+    public void visit(WasmStructGet instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
+        if (instruction.getSignedType() == null) {
             writer.writeByte(2);
         } else {
-            switch (expression.getSignedType()) {
+            switch (instruction.getSignedType()) {
                 case SIGNED:
                     writer.writeByte(3);
                     break;
@@ -1246,56 +1043,44 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                     break;
             }
         }
-        writer.writeLEB(module.types.indexOf(expression.getType()));
-        writer.writeLEB(expression.getFieldIndex());
-        popLocation();
+        writer.writeLEB(module.types.indexOf(instruction.getType()));
+        writer.writeLEB(instruction.getFieldIndex());
     }
 
     @Override
-    public void visit(WasmStructSet expression) {
-        pushLocation(expression);
-        expression.getInstance().acceptVisitor(this);
-        expression.getValue().acceptVisitor(this);
-        writer.writeByte(0xfb);
+    public void visit(WasmStructSet instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
         writer.writeByte(5);
-        writer.writeLEB(module.types.indexOf(expression.getType()));
-        writer.writeLEB(expression.getFieldIndex());
-        popLocation();
+        writer.writeLEB(module.types.indexOf(instruction.getType()));
+        writer.writeLEB(instruction.getFieldIndex());
     }
 
     @Override
-    public void visit(WasmArrayNewDefault expression) {
-        pushLocation(expression);
-        expression.getLength().acceptVisitor(this);
-        writer.writeByte(0xfb);
+    public void visit(WasmArrayNewDefault instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
         writer.writeByte(7);
-        writer.writeLEB(module.types.indexOf(expression.getType()));
-        popLocation();
+        writer.writeLEB(module.types.indexOf(instruction.getType()));
     }
 
     @Override
-    public void visit(WasmArrayNewFixed expression) {
-        pushLocation(expression);
-        for (var element : expression.getElements()) {
-            element.acceptVisitor(this);
-        }
-        writer.writeByte(0xfb);
+    public void visit(WasmArrayNewFixed instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
         writer.writeByte(8);
-        writer.writeLEB(module.types.indexOf(expression.getType()));
-        writer.writeLEB(expression.getElements().size());
-        popLocation();
+        writer.writeLEB(module.types.indexOf(instruction.getType()));
+        writer.writeLEB(instruction.getSize());
     }
 
     @Override
-    public void visit(WasmArrayGet expression) {
-        pushLocation(expression);
-        expression.getInstance().acceptVisitor(this);
-        expression.getIndex().acceptVisitor(this);
-        writer.writeByte(0xfb);
-        if (expression.getSignedType() == null) {
+    public void visit(WasmArrayGet instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
+        if (instruction.getSignedType() == null) {
             writer.writeByte(11);
         } else {
-            switch (expression.getSignedType()) {
+            switch (instruction.getSignedType()) {
                 case SIGNED:
                     writer.writeByte(12);
                     break;
@@ -1304,157 +1089,109 @@ class WasmBinaryRenderingVisitor implements WasmExpressionVisitor {
                     break;
             }
         }
-        writer.writeLEB(module.types.indexOf(expression.getType()));
-        popLocation();
+        writer.writeLEB(module.types.indexOf(instruction.getType()));
     }
 
     @Override
-    public void visit(WasmArraySet expression) {
-        pushLocation(expression);
-        expression.getInstance().acceptVisitor(this);
-        expression.getIndex().acceptVisitor(this);
-        expression.getValue().acceptVisitor(this);
-        writer.writeByte(0xfb);
+    public void visit(WasmArraySet instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
         writer.writeByte(14);
-        writer.writeLEB(module.types.indexOf(expression.getType()));
-        popLocation();
+        writer.writeLEB(module.types.indexOf(instruction.getType()));
     }
 
     @Override
-    public void visit(WasmArrayLength expression) {
-        pushLocation(expression);
-        expression.getInstance().acceptVisitor(this);
-        writer.writeByte(0xfb);
+    public void visit(WasmArrayLength instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
         writer.writeByte(15);
-        popLocation();
     }
 
     @Override
-    public void visit(WasmArrayCopy expression) {
-        pushLocation(expression);
-        expression.getTargetArray().acceptVisitor(this);
-        expression.getTargetIndex().acceptVisitor(this);
-        expression.getSourceArray().acceptVisitor(this);
-        expression.getSourceIndex().acceptVisitor(this);
-        expression.getSize().acceptVisitor(this);
-        writer.writeByte(0xfb);
+    public void visit(WasmArrayCopy instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
         writer.writeByte(17);
-        writer.writeLEB(module.types.indexOf(expression.getTargetArrayType()));
-        writer.writeLEB(module.types.indexOf(expression.getSourceArrayType()));
-        popLocation();
+        writer.writeLEB(module.types.indexOf(instruction.getTargetArrayType()));
+        writer.writeLEB(module.types.indexOf(instruction.getSourceArrayType()));
     }
 
     @Override
-    public void visit(WasmFunctionReference expression) {
-        pushLocation(expression);
-        writer.writeByte(0xd2);
-        writer.writeLEB(module.functions.indexOf(expression.getFunction()));
-        popLocation();
+    public void visit(WasmFunctionReference instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xD2);
+        writer.writeLEB(module.functions.indexOf(instruction.getFunction()));
     }
 
     @Override
-    public void visit(WasmInt31Reference expression) {
-        pushLocation(expression);
-        expression.getValue().acceptVisitor(this);
-        writer.writeByte(0xfb);
+    public void visit(WasmInt31Reference instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
         writer.writeByte(28);
-        popLocation();
     }
 
     @Override
-    public void visit(WasmInt31Get expression) {
-        pushLocation(expression);
-        expression.getValue().acceptVisitor(this);
-        writer.writeByte(0xfb);
-        writer.writeByte(expression.getSignedType() == WasmSignedType.SIGNED ? 29 : 30);
-        popLocation();
+    public void visit(WasmInt31Get instruction) {
+        emitLocation(instruction);
+        writer.writeByte(0xFB);
+        writer.writeByte(instruction.getSignedType() == WasmSignedType.SIGNED ? 29 : 30);
+    }
+
+    private void writeBlockType(WasmBlockType type) {
+        if (type == null) {
+            writer.writeType(null, module);
+        } else if (type instanceof WasmBlockType.Function) {
+            var functionType = ((WasmBlockType.Function) type).ref;
+            writer.writeSignedLEB(module.types.indexOf(functionType));
+        } else {
+            var valueType = ((WasmBlockType.Value) type).type;
+            writer.writeType(valueType, module);
+        }
+    }
+
+    private void writeLabel(WasmInstruction source, WasmInstructionList target) {
+        var targetDepth = blockDepths.get(target.getBreakTarget());
+        if (targetDepth == null) {
+            var sb = new StringBuilder("Instruction (path to root):\n");
+            var insn = source;
+            while (insn != null) {
+                sb.append("- ").append(insn).append("\n");
+                insn = insn.getOwner().getBreakTarget();
+            }
+            sb.append("Target (path to root):\n");
+            insn = target.getBreakTarget();
+            while (insn != null) {
+                sb.append("- ").append(insn).append("\n");
+                insn = insn.getOwner().getBreakTarget();
+            }
+            throw new IllegalStateException("Invalid break target for instruction\n" + sb);
+        }
+        writer.writeLEB(depth - targetDepth);
     }
 
     private int alignment(int value) {
         return 31 - Integer.numberOfLeadingZeros(Math.max(1, value));
     }
 
-    private void writeLabel(WasmBlock target) {
-        int blockDepth = blockDepths.get(target);
-        writer.writeLEB(depth - blockDepth);
-    }
-
-    private void pushLocation(WasmExpression expression) {
-        var location = expression.getLocation() != null
-                ? expression.getLocation()
-                : locationStack.isEmpty() ? null : locationStack.get(locationStack.size() - 1);
-        locationStack.add(location);
-        if (location != null) {
-            emitLocation(location);
-        } else {
-            emitDeferredLocation();
-        }
-    }
-
-    private void popLocation() {
-        var location = locationStack.remove(locationStack.size() - 1);
-        if (location != null) {
-            emitLocation(location);
-        }
-    }
-
-    private void emitLocation(TextLocation location) {
-        if (deferTextLocationToEmit) {
-            if (location != null) {
-                textLocationToEmit = location;
-                deferTextLocationToEmit = false;
-            } else {
-                return;
-            }
-        }
-        flushLocation();
-        textLocationToEmit = location;
-    }
-
-    private void emitDeferredLocation() {
-        if (textLocationToEmit != null) {
-            flushLocation();
-        }
-        textLocationToEmit = null;
-        deferTextLocationToEmit = true;
-    }
-
-    public void endLocation() {
-        textLocationToEmit = null;
-        deferTextLocationToEmit = false;
-        flushLocation();
-        if (debugLines != null) {
-            debugLines.advance(writer.getPosition() + addressOffset);
-            while (!methodStack.isEmpty()) {
-                methodStack.remove(methodStack.size() - 1);
-                debugLines.end();
-            }
-            debugLines.end();
-        }
-    }
-
-    private void flushLocation() {
-        if (writer.getPosition() != positionToEmit) {
-            if (!Objects.equals(lastEmittedLocation, textLocationToEmit)) {
-                doEmitLocation();
-            }
-            lastEmittedLocation = textLocationToEmit;
-            positionToEmit = writer.getPosition();
+    private void emitLocation(WasmInstruction instruction) {
+        if (!Objects.equals(instruction.getLocation(), lastEmittedLocation)) {
+            lastEmittedLocation = instruction.getLocation();
+            doEmitLocation();
         }
     }
 
     private void doEmitLocation() {
-        var address = positionToEmit + addressOffset;
+        var address = writer.getPosition() + addressOffset;
         if (dwarfGenerator != null) {
-            if (textLocationToEmit == null || textLocationToEmit.getFileName() == null) {
+            if (lastEmittedLocation == null || lastEmittedLocation.getFileName() == null) {
                 dwarfGenerator.endLineNumberSequence(address);
             } else {
-                dwarfGenerator.lineNumber(address, textLocationToEmit.getFileName(), textLocationToEmit.getLine());
+                dwarfGenerator.lineNumber(address, lastEmittedLocation.getFileName(), lastEmittedLocation.getLine());
             }
         }
         if (debugLines != null) {
             debugLines.advance(address);
-            var loc = textLocationToEmit;
+            var loc = lastEmittedLocation;
             var inlining = loc != null ? loc.getInlining() : null;
             while (inlining != null) {
                 currentMethodStack.add(inlining);

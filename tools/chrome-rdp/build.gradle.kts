@@ -24,9 +24,9 @@ description = "Debugging backend for Google Chrome RDP"
 dependencies {
     implementation(project(":core"))
     implementation(libs.jetty.server)
-    implementation(libs.jetty.websocket.server)
+    implementation(libs.jetty.servlet)
+    implementation(libs.jetty.ee10.websocket.server)
     implementation(libs.slf4j)
-    implementation(libs.javax.websocket)
     implementation(libs.hppc)
     implementation(libs.jackson.databind)
 }

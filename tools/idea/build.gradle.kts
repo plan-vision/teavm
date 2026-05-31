@@ -19,42 +19,86 @@ plugins {
     alias(libs.plugins.intellij)
 }
 
+repositories {
+    intellijPlatform {
+        defaultRepositories()
+    }
+}
+
 javaVersion {
     version = JavaVersion.VERSION_17
 }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+intellijPlatform {
+    pluginConfiguration {
+        name = "TeaVM Integration"
     }
-}
-
-intellij {
-    version = libs.versions.idea.asProvider().get()
-    type = "IC"
-    updateSinceUntilBuild = false
-
-    plugins = listOf(
-            "java",
-            "org.intellij.scala:${libs.versions.idea.scala.get()}",
-            "org.jetbrains.kotlin"
-    )
+    publishing {
+        token = providers.gradleProperty("teavm.idea.publishToken")
+    }
 }
 
 dependencies {
     compileOnly(project(":tools:ide-deps"))
     runtimeOnly(project(path = ":tools:ide-deps", configuration = "shadow").setTransitive(false))
+    intellijPlatform {
+        intellijIdeaCommunity(libs.versions.idea.asProvider())
+        bundledPlugin("com.intellij.java")
+        bundledPlugin("org.jetbrains.kotlin")
+        plugin(provider { "org.intellij.scala" }, libs.versions.idea.scala, provider { "com.jetbrains.plugins" })
+    }
 }
 
 tasks {
-    instrumentedJar {
+    composedJar {
         archiveFileName = "teavm-plugin.jar"
     }
-    buildSearchableOptions {
-        enabled = false
+    build {
+        dependsOn(buildPlugin)
     }
+}
 
-    publishPlugin {
-        token = providers.gradleProperty("teavm.idea.publishToken")
+tasks.whenTaskAdded {
+    if (name == "relocateJar") {
+        val t = this
+        tasks.prepareTestSandbox {
+            dependsOn(t)
+        }
+        tasks.prepareSandbox {
+            dependsOn(t)
+        }
     }
+}
+
+val configPath = project.layout.buildDirectory.dir("generated/sources/config")
+
+val createConfig by tasks.registering {
+    outputs.dir(configPath)
+    inputs.property("version", project.version)
+    val basePath = configPath
+    val version = project.version
+    doLast {
+        val file = File(basePath.get().asFile, "org/teavm/idea/BuildConfig.java")
+        file.parentFile.mkdirs()
+        file.writeText("""
+            package org.teavm.idea;
+            
+            public final class BuildConfig {
+                public static final String VERSION = "$version";
+            
+                private BuildConfig() {
+                }
+            }
+        """.trimIndent())
+    }
+}
+
+tasks.compileJava.configure {
+    dependsOn(createConfig)
+    options.forkOptions.memoryMaximumSize = "1g"
+}
+sourceSets.main.configure { java.srcDir(configPath) }
+
+tasks.withType<Checkstyle> {
+    exclude("org/teavm/idea/BuildConfig.java")
 }

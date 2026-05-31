@@ -29,6 +29,7 @@ configurations {
 dependencies {
     "teavm"(project(":jso:impl"))
     compileOnly(project(":interop:core"))
+    compileOnly(libs.jetbrains.annotations)
 }
 
 teavmPublish {
@@ -39,4 +40,8 @@ tasks.withType<Jar> {
     manifest {
         attributes["Automatic-Module-Name"] = "org.teavm.jso"
     }
+}
+
+javaVersion {
+    version = JavaVersion.VERSION_11
 }

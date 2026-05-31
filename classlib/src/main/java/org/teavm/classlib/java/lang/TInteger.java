@@ -18,6 +18,7 @@ package org.teavm.classlib.java.lang;
 import static org.teavm.classlib.impl.IntegerUtil.toUnsignedLogRadixString;
 import java.util.Objects;
 import org.teavm.backend.javascript.spi.InjectedBy;
+import org.teavm.interop.Intrinsified;
 import org.teavm.interop.NoSideEffects;
 
 public class TInteger extends TNumber implements TComparable<TInteger> {
@@ -42,6 +43,40 @@ public class TInteger extends TNumber implements TComparable<TInteger> {
             radix = 10;
         }
         return new TAbstractStringBuilder(20).append(i, radix).toString();
+    }
+
+
+    public static String toUnsignedString(int value, int radix) {
+        radix = Math.min(TCharacter.MAX_RADIX, Math.max(radix, TCharacter.MIN_RADIX));
+        int sz = 0;
+        var v = value;
+        while (v != 0L) {
+            v = Integer.divideUnsigned(v, radix);
+            ++sz;
+        }
+        sz = Math.max(sz, 1);
+        var chars = new char[sz];
+        while (sz > 0) {
+            chars[--sz] = TCharacter.forDigit(Integer.remainderUnsigned(value, radix), radix);
+            value = Integer.divideUnsigned(value, radix);
+        }
+        return (String) (Object) TString.fromArray(chars);
+    }
+
+    public static String toUnsignedString(int value) {
+        int sz = 0;
+        var v = value;
+        while (v != 0L) {
+            v = Integer.divideUnsigned(v, 10);
+            ++sz;
+        }
+        sz = Math.max(sz, 1);
+        var chars = new char[sz];
+        while (sz > 0) {
+            chars[--sz] = TCharacter.forDigit(Integer.remainderUnsigned(value, 10), 10);
+            value = Integer.divideUnsigned(value, 10);
+        }
+        return (String) (Object) TString.fromArray(chars);
     }
 
     public static int hashCode(int value) {
@@ -387,13 +422,32 @@ public class TInteger extends TNumber implements TComparable<TInteger> {
 
     @InjectedBy(IntegerNativeGenerator.class)
     @NoSideEffects
+    @Intrinsified
     public static native int divideUnsigned(int dividend, int divisor);
 
     @InjectedBy(IntegerNativeGenerator.class)
     @NoSideEffects
+    @Intrinsified
     public static native int remainderUnsigned(int dividend, int divisor);
 
     @InjectedBy(IntegerNativeGenerator.class)
     @NoSideEffects
+    @Intrinsified
     public static native int compareUnsigned(int a, int b);
+
+    public static int min(int a, int b) {
+        return TMath.min(a, b);
+    }
+
+    public static int max(int a, int b) {
+        return TMath.max(a, b);
+    }
+
+    public static long toUnsignedLong(int n) {
+        return (long) n & 0xFFFFFFFFL;
+    }
+
+    public static int sum(int a, int b) {
+        return a + b;
+    }
 }

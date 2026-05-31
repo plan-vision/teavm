@@ -15,10 +15,10 @@
  */
 package org.teavm.jso.impl.wasmgc;
 
-import org.teavm.backend.wasm.generate.gc.classes.WasmGCClassInfoProvider;
-import org.teavm.backend.wasm.generate.gc.classes.WasmGCCustomTypeMapper;
-import org.teavm.backend.wasm.generate.gc.classes.WasmGCCustomTypeMapperFactory;
-import org.teavm.backend.wasm.generate.gc.classes.WasmGCCustomTypeMapperFactoryContext;
+import org.teavm.backend.wasm.generate.classes.WasmGCClassInfoProvider;
+import org.teavm.backend.wasm.generate.classes.WasmGCCustomTypeMapper;
+import org.teavm.backend.wasm.generate.classes.WasmGCCustomTypeMapperFactory;
+import org.teavm.backend.wasm.generate.classes.WasmGCCustomTypeMapperFactoryContext;
 import org.teavm.backend.wasm.model.WasmType;
 import org.teavm.jso.impl.JSTypeHelper;
 import org.teavm.model.ValueType;
@@ -30,7 +30,7 @@ class WasmGCJSTypeMapper implements WasmGCCustomTypeMapper, WasmGCCustomTypeMapp
     @Override
     public WasmType map(String className) {
         if (typeHelper.isJavaScriptClass(className)) {
-            return WasmType.Reference.EXTERN;
+            return WasmType.EXTERN;
         } else if (className.equals(WasmGCJSRuntime.CharArrayData.class.getName())) {
             var cls = classInfoProvider.getClassInfo(ValueType.arrayOf(ValueType.CHARACTER));
             var field = cls.getStructure().getFields().get(WasmGCClassInfoProvider.ARRAY_DATA_FIELD_OFFSET);

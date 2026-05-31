@@ -36,6 +36,7 @@ public class TDouble extends TNumber implements TComparable<TDouble> {
     public static final int SIZE = 64;
     public static final int BYTES = SIZE / Byte.SIZE;
     public static final Class<Double> TYPE = double.class;
+    public static final int PRECISION = 53;
     private final double value;
 
     public TDouble(double value) {
@@ -79,7 +80,7 @@ public class TDouble extends TNumber implements TComparable<TDouble> {
     }
 
     public static double parseDouble(String string) throws NumberFormatException {
-        // TODO: parse infinite and different radix
+        // TODO: parse different radix
 
         if (string.isEmpty()) {
             throw new NumberFormatException();
@@ -94,6 +95,7 @@ public class TDouble extends TNumber implements TComparable<TDouble> {
         while (string.charAt(end - 1) <= ' ') {
             --end;
         }
+        int endForNamedDouble = end; // InfinityF/f/D/d, NaNF/f/D/d cannot be parsed
         if (string.charAt(end - 1) == 'f' || string.charAt(end - 1) == 'F'
                 || string.charAt(end - 1) == 'd' || string.charAt(end - 1) == 'D') {
             --end;
@@ -119,6 +121,16 @@ public class TDouble extends TNumber implements TComparable<TDouble> {
         if (c != '.') {
             hasOneDigit = true;
             if (c < '0' || c > '9') {
+                if (c == 'I') {
+                    if (endForNamedDouble - index == 8 && string.regionMatches(false, index, "Infinity", 0, 8)) {
+                        return negative ? NEGATIVE_INFINITY : POSITIVE_INFINITY;
+                    }
+                }
+                if (c == 'N') {
+                    if (endForNamedDouble - index == 3 && string.regionMatches(false, index, "NaN", 0, 3)) {
+                        return NaN;
+                    }
+                }
                 throw new NumberFormatException();
             }
             while (index < end && string.charAt(index) == '0') {
@@ -256,11 +268,9 @@ public class TDouble extends TNumber implements TComparable<TDouble> {
     @Unmanaged
     public static native boolean isNaN(double v);
 
-    @JSBody(params = "v", script = "return !isFinite(v);")
-    @Import(module = "teavm", name = "isinf")
-    @NoSideEffects
-    @Unmanaged
-    public static native boolean isInfinite(double v);
+    public static boolean isInfinite(double v) {
+        return !isFinite(v) && !isNaN(v);
+    }
 
     @JSBody(params = "v", script = "return isFinite(v);")
     @Import(module = "teavm", name = "isfinite")
@@ -353,5 +363,17 @@ public class TDouble extends TNumber implements TComparable<TDouble> {
         }
 
         return new String(buffer, 0, sz);
+    }
+
+    public static double sum(double a, double b) {
+        return a + b;
+    }
+
+    public static double min(double a, double b) {
+        return Math.min(a, b);
+    }
+
+    public static double max(double a, double b) {
+        return Math.max(a, b);
     }
 }

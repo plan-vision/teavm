@@ -89,8 +89,31 @@ public class TRuntime {
         return GC.availableBytes();
     }
 
-    @SupportedOn(Platforms.JAVASCRIPT)
+    @SupportedOn({Platforms.JAVASCRIPT, Platforms.WEBASSEMBLY_GC})
     public int availableProcessors() {
         return Navigator.hardwareConcurrency();
+    }
+
+    public static Version version() {
+        if (version == null) {
+            version = new Version();
+        }
+        return version;
+    }
+
+    private static Version version;
+
+    public static final class Version implements Comparable<Version> {
+        private Version() {
+        }
+
+        public int feature() {
+            return 21;
+        }
+
+        @Override
+        public int compareTo(Version o) {
+            return 0;
+        }
     }
 }

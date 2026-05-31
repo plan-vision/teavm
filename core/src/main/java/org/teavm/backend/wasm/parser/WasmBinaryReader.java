@@ -52,6 +52,15 @@ public class WasmBinaryReader {
         }
     }
 
+    public WasmHollowBlockType readBlockType() {
+        if (data[ptr] < 0x40) {
+            return new WasmHollowBlockType.Function(readSignedLEB());
+        } else {
+            var result = readType();
+            return result != null ? new WasmHollowBlockType.Value(result) : null;
+        }
+    }
+
     public WasmHollowType readType() {
         var typeId = data[ptr++];
         switch (typeId) {
@@ -100,6 +109,8 @@ public class WasmBinaryReader {
                 return special(WasmType.SpecialReferenceKind.STRUCT, nullable);
             case 0x6A:
                 return special(WasmType.SpecialReferenceKind.ARRAY, nullable);
+            case 0x69:
+                return special(WasmType.SpecialReferenceKind.EXN, nullable);
             default:
                 throw new ParseException("Unknown type", ptr);
         }

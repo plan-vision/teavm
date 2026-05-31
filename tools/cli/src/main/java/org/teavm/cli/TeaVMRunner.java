@@ -21,6 +21,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Arrays;
+import java.util.List;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -59,7 +60,7 @@ public final class TeaVMRunner {
         options.addOption(Option.builder("t")
                 .argName("target")
                 .hasArg()
-                .desc("target type (javascript/js, webassembly/wasm, webassembly-wasi/wasm-wasi/wasi, C)")
+                .desc("target type (js, wasm-gc, C)")
                 .build());
         options.addOption(Option.builder("d")
                 .argName("directory")
@@ -126,10 +127,6 @@ public final class TeaVMRunner {
                 .argName("version")
                 .hasArg()
                 .desc("WebAssembly binary version (currently, only 1 is supported)")
-                .build());
-        options.addOption(Option.builder()
-                .longOpt("wasm-use-exceptions")
-                .desc("Specifies that WebAssembly exception handling instructions can be used")
                 .build());
         options.addOption(Option.builder("e")
                 .longOpt("entry-point")
@@ -216,14 +213,9 @@ public final class TeaVMRunner {
                 case "js":
                     tool.setTargetType(TeaVMTargetType.JAVASCRIPT);
                     break;
-                case "webassembly":
-                case "wasm":
-                    tool.setTargetType(TeaVMTargetType.WEBASSEMBLY);
-                    break;
-                case "webassembly-wasi":
-                case "wasm-wasi":
-                case "wasi":
-                    tool.setTargetType(TeaVMTargetType.WEBASSEMBLY_WASI);
+                case "wasm-gc":
+                case "webassembly-gc":
+                    tool.setTargetType(TeaVMTargetType.WEBASSEMBLY_GC);
                     break;
                 case "c":
                     tool.setTargetType(TeaVMTargetType.C);
@@ -356,9 +348,6 @@ public final class TeaVMRunner {
                 printUsage();
             }
         }
-        if (commandLine.hasOption("wasm-use-exceptions")) {
-            tool.setWasmExceptionsUsed(true);
-        }
     }
 
     private void parseCOptions() {
@@ -465,9 +454,12 @@ public final class TeaVMRunner {
             return;
         }
         URL[] urls = new URL[classPath.length];
+        var files = new File[classPath.length];
         for (int i = 0; i < classPath.length; ++i) {
+            var file = new File(classPath[i]);
+            files[i] = file;
             try {
-                urls[i] = new File(classPath[i]).toURI().toURL();
+                urls[i] = file.toURI().toURL();
             } catch (MalformedURLException e) {
                 System.err.println("Illegal classpath entry: " + classPath[i]);
                 System.exit(-1);
@@ -476,6 +468,7 @@ public final class TeaVMRunner {
         }
 
         tool.setClassLoader(new URLClassLoader(urls, TeaVMRunner.class.getClassLoader()));
+        tool.setClassPath(List.of(files));
     }
 
     class ProgressListenerImpl implements TeaVMProgressListener {

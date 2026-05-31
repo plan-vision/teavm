@@ -15,6 +15,7 @@
  */
 package org.teavm.backend.wasm.disasm;
 
+import org.teavm.backend.wasm.parser.WasmHollowBlockType;
 import org.teavm.backend.wasm.parser.WasmHollowStorageType;
 import org.teavm.backend.wasm.parser.WasmHollowType;
 
@@ -27,10 +28,16 @@ public abstract class BaseDisassemblyListener  {
         this.nameProvider = nameProvider;
     }
 
-    protected void writeBlockType(WasmHollowType type) {
+    protected void writeBlockType(WasmHollowBlockType type) {
         if (type != null) {
             writer.write(" ");
-            writeType(type);
+            if (type instanceof WasmHollowBlockType.Value) {
+                writeType(((WasmHollowBlockType.Value) type).type);
+            } else {
+                writer.write("(type ");
+                writeTypeRef(((WasmHollowBlockType.Function) type).ref);
+                writer.write(")");
+            }
         }
     }
 
@@ -90,6 +97,9 @@ public abstract class BaseDisassemblyListener  {
                         case STRUCT:
                             writer.write("structref");
                             return;
+                        case EXN:
+                            writer.write("exnref");
+                            return;
                         case I31:
                             writer.write("i31ref");
                             return;
@@ -101,28 +111,33 @@ public abstract class BaseDisassemblyListener  {
                     switch (refType.kind) {
                         case ANY:
                             writer.write("any");
-                            return;
+                            break;
                         case EQ:
                             writer.write("eq");
-                            return;
+                            break;
                         case FUNC:
                             writer.write("func");
-                            return;
+                            break;
                         case ARRAY:
                             writer.write("array");
-                            return;
+                            break;
                         case EXTERN:
                             writer.write("extern");
-                            return;
+                            break;
                         case STRUCT:
                             writer.write("struct");
-                            return;
+                            break;
+                        case EXN:
+                            writer.write("exn");
+                            break;
                         case I31:
                             writer.write("i31");
-                            return;
+                            break;
                         default:
                             throw new IllegalArgumentException();
                     }
+                    writer.write(")");
+                    return;
                 }
             } else if (type instanceof WasmHollowType.CompositeReference) {
                 var refType = (WasmHollowType.CompositeReference) type;

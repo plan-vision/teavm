@@ -40,11 +40,13 @@ import org.teavm.model.MethodReader;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
 import org.teavm.model.analysis.ClassInitializerInfo;
+import org.teavm.parsing.resource.ResourceProvider;
 
 public abstract class RenderingContext {
     private final DebugInformationEmitter debugEmitter;
     private ClassReaderSource initialClassSource;
     private ListableClassReaderSource classSource;
+    private ResourceProvider resourceProvider;
     private ClassLoader classLoader;
     private ServiceRepository services;
     private Properties properties;
@@ -62,6 +64,7 @@ public abstract class RenderingContext {
 
     public RenderingContext(DebugInformationEmitter debugEmitter,
             ClassReaderSource initialClassSource, ListableClassReaderSource classSource,
+            ResourceProvider resourceProvider,
             ClassLoader classLoader, ServiceRepository services, Properties properties,
             NamingStrategy naming, DependencyInfo dependencyInfo,
             Predicate<MethodReference> virtualPredicate,
@@ -71,6 +74,7 @@ public abstract class RenderingContext {
         this.debugEmitter = debugEmitter;
         this.initialClassSource = initialClassSource;
         this.classSource = classSource;
+        this.resourceProvider = resourceProvider;
         this.classLoader = classLoader;
         this.services = services;
         this.properties = properties;
@@ -88,6 +92,10 @@ public abstract class RenderingContext {
 
     public ListableClassReaderSource getClassSource() {
         return classSource;
+    }
+
+    public ResourceProvider getResourceProvider() {
+        return resourceProvider;
     }
 
     public ClassLoader getClassLoader() {
@@ -152,7 +160,7 @@ public abstract class RenderingContext {
         if (cst instanceof ValueType) {
             ValueType type = (ValueType) cst;
             writer.appendFunction("$rt_cls").append("(");
-            typeToClsString(writer, type);
+            RenderingUtil.typeToClsString(writer, type);
             writer.append(")");
         } else if (cst instanceof String) {
             String string = (String) cst;
@@ -160,14 +168,7 @@ public abstract class RenderingContext {
             writer.appendFunction("$rt_s").append("(" + index + ")");
         } else if (cst instanceof Long) {
             long value = (Long) cst;
-            if (value == 0) {
-                writer.appendFunction("Long_ZERO");
-            } else if ((int) value == value) {
-                writer.appendFunction("Long_fromInt").append("(").append(String.valueOf(value)).append(")");
-            } else {
-                writer.appendFunction("Long_create").append("(" + (value & 0xFFFFFFFFL)
-                        + ", " + (value >>> 32) + ")");
-            }
+            RenderingUtil.appendLongConstant(writer, value);
         } else if (cst instanceof Character) {
             writer.append(Integer.toString((Character) cst));
         } else if (cst instanceof Boolean) {
@@ -220,61 +221,6 @@ public abstract class RenderingContext {
         }
     }
 
-    public void typeToClsString(SourceWriter writer, ValueType type) {
-        int arrayCount = 0;
-        while (type instanceof ValueType.Array) {
-            arrayCount++;
-            type = ((ValueType.Array) type).getItemType();
-        }
-
-        for (int i = 0; i < arrayCount; ++i) {
-            writer.appendFunction("$rt_arraycls").append("(");
-        }
-
-        if (type instanceof ValueType.Object) {
-            ValueType.Object objType = (ValueType.Object) type;
-            writer.appendClass(objType.getClassName());
-        } else if (type instanceof ValueType.Void) {
-            writer.appendFunction("$rt_voidcls");
-        } else if (type instanceof ValueType.Primitive) {
-            ValueType.Primitive primitiveType = (ValueType.Primitive) type;
-            switch (primitiveType.getKind()) {
-                case BOOLEAN:
-                    writer.appendFunction("$rt_booleancls");
-                    break;
-                case CHARACTER:
-                    writer.appendFunction("$rt_charcls");
-                    break;
-                case BYTE:
-                    writer.appendFunction("$rt_bytecls");
-                    break;
-                case SHORT:
-                    writer.appendFunction("$rt_shortcls");
-                    break;
-                case INTEGER:
-                    writer.appendFunction("$rt_intcls");
-                    break;
-                case LONG:
-                    writer.appendFunction("$rt_longcls");
-                    break;
-                case FLOAT:
-                    writer.appendFunction("$rt_floatcls");
-                    break;
-                case DOUBLE:
-                    writer.appendFunction("$rt_doublecls");
-                    break;
-                default:
-                    throw new IllegalArgumentException("The type is not renderable");
-            }
-        } else {
-            throw new IllegalArgumentException("The type is not renderable");
-        }
-
-        for (int i = 0; i < arrayCount; ++i) {
-            writer.append(")");
-        }
-    }
-
     public String pointerName() {
         return minifying ? "$p" : "$ptr";
     }
@@ -301,6 +247,9 @@ public abstract class RenderingContext {
             holder = new InjectorHolder(null);
             if (!isBootstrap()) {
                 ClassReader cls = classSource.get(ref.getClassName());
+                if (cls == null) {
+                    cls = initialClassSource.get(ref.getClassName());
+                }
                 if (cls != null) {
                     MethodReader method = cls.getMethod(ref.getDescriptor());
                     if (method != null) {

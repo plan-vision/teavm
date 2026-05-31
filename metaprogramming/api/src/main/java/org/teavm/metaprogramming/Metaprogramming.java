@@ -15,96 +15,128 @@
  */
 package org.teavm.metaprogramming;
 
+import java.util.Iterator;
+import org.teavm.extension.introspect.IntrospectClass;
+import org.teavm.extension.introspect.IntrospectField;
+import org.teavm.extension.introspect.IntrospectMethod;
+
 @SuppressWarnings("unused")
 public final class Metaprogramming {
     private Metaprogramming() {
     }
 
     public static <T> Value<T> emit(Computation<T> computation) {
-        unsupported();
-        return null;
+        throw unsupported();
     }
 
     public static void emit(Action action) {
-        unsupported();
+        throw unsupported();
     }
 
     public static <T> Value<T> lazyFragment(LazyComputation<T> computation) {
-        unsupported();
-        return null;
+        throw unsupported();
     }
 
     public static <T> Value<T> lazy(Computation<T> computation) {
-        unsupported();
-        return null;
+        throw unsupported();
     }
 
     public static void exit(Computation<?> returnValue) {
-        unsupported();
+        throw unsupported();
     }
 
     public static void exit() {
-        unsupported();
+        throw unsupported();
     }
 
     public static void location(String fileName, int lineNumber) {
-        unsupported();
+        throw unsupported();
     }
 
     public static void defaultLocation() {
-        unsupported();
+        throw unsupported();
     }
 
+    @Deprecated
     public static SourceLocation getLocation() {
-        unsupported();
-        return null;
+        throw unsupported();
     }
 
+    public static org.teavm.extension.diagnostics.SourceLocation currentLocation() {
+        throw unsupported();
+    }
+
+    public static MetaprogrammingEnvironment environment() {
+        throw unsupported();
+    }
+
+    @Deprecated
     public static ReflectClass<?> findClass(String name) {
-        unsupported();
-        return null;
+        throw unsupported();
     }
 
+    @Deprecated
     public static <T> ReflectClass<T> findClass(Class<T> cls) {
-        unsupported();
-        return null;
+        throw unsupported();
     }
 
+    @Deprecated
     public static ClassLoader getClassLoader() {
-        unsupported();
-        return null;
+        throw unsupported();
     }
 
+    @Deprecated
     public static <T> ReflectClass<T[]> arrayClass(ReflectClass<T> componentType) {
-        throw new UnsupportedOperationException();
+        throw unsupported();
     }
 
+    @Deprecated
     public static ReflectClass<?> createClass(byte[] bytecode) {
-        unsupported();
-        return null;
+        throw unsupported();
     }
 
+    @Deprecated
     public static <T> Value<T> proxy(Class<T> type, InvocationHandler<T> handler)  {
-        unsupported();
-        return null;
+        throw unsupported();
     }
 
+    @Deprecated
     public static <T> Value<T> proxy(ReflectClass<T> type, InvocationHandler<T> handler) {
-        unsupported();
-        return null;
+        throw unsupported();
     }
 
+    public static <T> Value<T> proxy(IntrospectClass<T> type, ProxyHandler<T> handler) {
+        throw unsupported();
+    }
+
+    @Deprecated
     public static Diagnostics getDiagnostics() {
-        unsupported();
-        return null;
+        throw unsupported();
+    }
+
+    @Deprecated
+    public static Iterator<Resource> getResources(String name) {
+        throw unsupported();
+    }
+
+    public static MethodCaller caller(IntrospectMethod method) {
+        throw unsupported();
+    }
+
+    public static FieldAccessor accessor(IntrospectField field) {
+        throw unsupported();
+    }
+
+    public static <T> ClassHandle<T> handle(IntrospectClass<T> cls) {
+        throw unsupported();
     }
 
     public static void unsupportedCase() {
-        unsupported();
+        throw unsupported();
     }
 
-    private static void unsupported() {
-        throw new UnsupportedOperationException("This operation is only supported from TeaVM compile-time "
+    private static RuntimeException unsupported() {
+        return new UnsupportedOperationException("This operation is only supported from TeaVM compile-time "
                 + "environment");
     }
 }

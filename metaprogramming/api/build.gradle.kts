@@ -27,9 +27,14 @@ configurations {
 }
 
 dependencies {
+    api(project(":extension:apis"))
     "teavm"(project(":metaprogramming:impl"))
 }
 
 teavmPublish {
     artifactId = "teavm-metaprogramming-api"
+}
+
+javaVersion {
+    version = JavaVersion.VERSION_11
 }

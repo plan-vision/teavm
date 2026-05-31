@@ -15,7 +15,8 @@
  */
 package org.teavm.model;
 
-import java.util.Objects;
+import java.util.Collections;
+import java.util.List;
 import java.util.function.Function;
 
 public class MethodHolder extends MemberHolder implements MethodReader {
@@ -29,6 +30,7 @@ public class MethodHolder extends MemberHolder implements MethodReader {
     private AnnotationValue annotationDefault;
     private AnnotationContainer[] parameterAnnotations;
     private MethodReference reference;
+    private List<String> thrownTypes;
 
     public MethodHolder(MethodDescriptor descriptor) {
         super(descriptor.getName());
@@ -54,18 +56,18 @@ public class MethodHolder extends MemberHolder implements MethodReader {
     }
 
     @Override
-    public int genericParameterCount() {
-        return genericParameterTypes != null ? genericParameterTypes.length : 0;
-    }
-
-    @Override
     public GenericValueType genericParameterType(int index) {
         return genericParameterTypes != null ? genericParameterTypes[index] : null;
     }
 
+    @Override
+    public GenericValueType[] getGenericParameterTypes() {
+        return genericParameterTypes != null ? genericParameterTypes.clone() : null;
+    }
+
     public void setGenericSignature(GenericValueType returnType, GenericValueType[] parameterTypes) {
-        genericReturnType = Objects.requireNonNull(returnType);
-        genericParameterTypes = parameterTypes.clone();
+        genericReturnType = returnType;
+        genericParameterTypes = parameterTypes != null ? parameterTypes.clone() : null;
     }
 
     public void removeGenericSignature() {
@@ -179,5 +181,18 @@ public class MethodHolder extends MemberHolder implements MethodReader {
 
     public void setAnnotationDefault(AnnotationValue annotationDefault) {
         this.annotationDefault = annotationDefault;
+    }
+
+    @Override
+    public List<? extends String> getThrownTypes() {
+        return thrownTypes != null ? thrownTypes : Collections.emptyList();
+    }
+
+    public void setThrownTypes(List<? extends String> thrownTypes) {
+        if (thrownTypes.isEmpty()) {
+            this.thrownTypes = null;
+        } else {
+            this.thrownTypes = List.copyOf(thrownTypes);
+        }
     }
 }

@@ -22,6 +22,8 @@ import java.util.Objects;
 public abstract class GenericValueType {
     private static final Argument[] EMPTY_ARRAY = new Argument[0];
 
+    public abstract ValueType asValueType();
+
     public static final class Primitive extends GenericValueType {
         private final PrimitiveType kind;
         private final int hash;
@@ -29,6 +31,11 @@ public abstract class GenericValueType {
         private Primitive(PrimitiveType kind) {
             this.kind = kind;
             hash = 17988782 ^ (kind.ordinal() * 31);
+        }
+
+        @Override
+        public ValueType asValueType() {
+            return ValueType.primitive(kind);
         }
 
         public PrimitiveType getKind() {
@@ -74,10 +81,20 @@ public abstract class GenericValueType {
         public int hashCode() {
             return hash;
         }
+
+        @Override
+        public boolean canBeRepresentedAsRaw() {
+            return true;
+        }
     }
 
     public static final class Void extends GenericValueType {
         private Void() {
+        }
+
+        @Override
+        public ValueType asValueType() {
+            return ValueType.VOID;
         }
 
         @Override
@@ -93,6 +110,11 @@ public abstract class GenericValueType {
         @Override
         public int hashCode() {
             return 53604390;
+        }
+
+        @Override
+        public boolean canBeRepresentedAsRaw() {
+            return true;
         }
     }
 
@@ -192,8 +214,17 @@ public abstract class GenericValueType {
             return className;
         }
 
+        public String getFullClassName() {
+            return parent != null ? parent.getFullClassName() + "$" + className : className;
+        }
+
         public Argument[] getArguments() {
             return arguments.length == 0 ? EMPTY_ARRAY : arguments.clone();
+        }
+
+        @Override
+        public ValueType asValueType() {
+            return arguments == null || arguments.length == 0 ? ValueType.object(className) : null;
         }
 
         @Override
@@ -272,6 +303,11 @@ public abstract class GenericValueType {
             }
             return hash;
         }
+
+        @Override
+        public boolean canBeRepresentedAsRaw() {
+            return arguments == null || arguments.length == 0;
+        }
     }
 
     public static final class Variable extends Reference {
@@ -284,6 +320,11 @@ public abstract class GenericValueType {
 
         public String getName() {
             return name;
+        }
+
+        @Override
+        public ValueType asValueType() {
+            return null;
         }
 
         @Override
@@ -315,12 +356,16 @@ public abstract class GenericValueType {
             sb.append(name);
             sb.append(";");
         }
+
+        @Override
+        public boolean canBeRepresentedAsRaw() {
+            return false;
+        }
     }
 
     public static final class Array extends Reference {
         private final GenericValueType itemType;
         private int hash;
-
 
         public Array(GenericValueType itemType) {
             this.itemType = itemType;
@@ -328,6 +373,12 @@ public abstract class GenericValueType {
 
         public GenericValueType getItemType() {
             return itemType;
+        }
+
+        @Override
+        public ValueType asValueType() {
+            var item = itemType.asValueType();
+            return item != null ? ValueType.arrayOf(item) : null;
         }
 
         @Override
@@ -358,6 +409,11 @@ public abstract class GenericValueType {
         void toString(StringBuilder sb) {
             sb.append("[");
             itemType.toString(sb);
+        }
+
+        @Override
+        public boolean canBeRepresentedAsRaw() {
+            return itemType.canBeRepresentedAsRaw();
         }
     }
 
@@ -572,6 +628,8 @@ public abstract class GenericValueType {
         GenericValueType type = parse(text, position);
         return position.index == text.length() ? type : null;
     }
+
+    public abstract boolean canBeRepresentedAsRaw();
 
     public static class ParsePosition {
         public int index;

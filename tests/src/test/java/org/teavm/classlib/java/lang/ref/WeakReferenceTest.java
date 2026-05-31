@@ -15,10 +15,12 @@
  */
 package org.teavm.classlib.java.lang.ref;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
@@ -34,8 +36,19 @@ import org.teavm.junit.TestPlatform;
 @EachTestCompiledSeparately
 public class WeakReferenceTest {
     @Test
-    @SkipPlatform({ TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY, TestPlatform.WASI,
-            TestPlatform.WEBASSEMBLY_GC })
+    public void weakReferenceDeps() {
+        var a = new A();
+        var b = new B();
+        var weakRefs = List.of(new WeakReference<>(a), new WeakReference<>(b));
+        var sb = new StringBuilder();
+        for (var ref : weakRefs) {
+            sb.append(ref.get().foo()).append(";");
+        }
+        assertEquals("A.foo;B.foo;", sb.toString());
+    }
+
+    @Test
+    @SkipPlatform({TestPlatform.WEBASSEMBLY_GC, TestPlatform.JAVASCRIPT})
     public void deref() {
         var ref = createAndTestRef(null);
         GCSupport.tryToTriggerGC(ref);
@@ -43,7 +56,7 @@ public class WeakReferenceTest {
     }
 
     @Test
-    @SkipPlatform({ TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC })
+    @SkipPlatform({TestPlatform.WEBASSEMBLY_GC, TestPlatform.JAVASCRIPT})
     public void refQueue() {
         var queue = new ReferenceQueue<>();
         var ref = createAndTestRef(queue);
@@ -71,7 +84,7 @@ public class WeakReferenceTest {
     }
 
     @Test
-    @SkipPlatform({ TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC })
+    @SkipPlatform({ TestPlatform.C, TestPlatform.WEBASSEMBLY_GC, TestPlatform.JAVASCRIPT })
     public void queueRemove() throws InterruptedException {
         var queue = new ReferenceQueue<>();
         var ref = createAndTestRef(queue);
@@ -106,5 +119,23 @@ public class WeakReferenceTest {
 
         ref.clear();
         assertNull(ref.get());
+    }
+
+    interface I {
+        String foo();
+    }
+
+    static class A implements I {
+        @Override
+        public String foo() {
+            return "A.foo";
+        }
+    }
+    
+    static class B implements I {
+        @Override
+        public String foo() {
+            return "B.foo";
+        }
     }
 }

@@ -15,60 +15,39 @@
  */
 package org.teavm.classlib.java.lang.reflect;
 
-import org.teavm.classlib.PlatformDetector;
-import org.teavm.classlib.impl.reflection.Flags;
-import org.teavm.classlib.impl.reflection.MethodCaller;
 import org.teavm.classlib.java.lang.TClass;
 import org.teavm.classlib.java.lang.TIllegalAccessException;
 import org.teavm.classlib.java.lang.TIllegalArgumentException;
-import org.teavm.classlib.java.lang.TObject;
-import org.teavm.platform.Platform;
+import org.teavm.runtime.reflect.ClassInfoUtil;
+import org.teavm.runtime.reflect.MethodInfo;
+import org.teavm.runtime.reflect.ModifiersInfo;
 
-public class TMethod extends TAccessibleObject implements TMember {
-    private TClass<?> declaringClass;
-    private String name;
-    private int flags;
-    private int accessLevel;
-    private TClass<?> returnType;
-    private TClass<?>[] parameterTypes;
-    private MethodCaller caller;
+public class TMethod extends TExecutable implements TMember {
+    private TType genericReturnType;
 
-    public TMethod(TClass<?> declaringClass, String name, int flags, int accessLevel, TClass<?> returnType,
-            TClass<?>[] parameterTypes, MethodCaller caller) {
-        this.declaringClass = declaringClass;
-        this.name = name;
-        this.flags = flags;
-        this.accessLevel = accessLevel;
-        this.returnType = returnType;
-        this.parameterTypes = parameterTypes;
-        this.caller = caller;
-    }
-
-    @Override
-    public TClass<?> getDeclaringClass() {
-        return declaringClass;
+    public TMethod(TClass<?> declaringClass, MethodInfo info) {
+        super(declaringClass, info);
     }
 
     @Override
     public String getName() {
-        return name;
-    }
-
-    @Override
-    public int getModifiers() {
-        return Flags.getModifiers(flags, accessLevel);
+        return methodInfo.name().getStringObject();
     }
 
     public TClass<?> getReturnType() {
-        return returnType;
+        return (TClass<?>) (Object) ClassInfoUtil.resolve(methodInfo.returnType()).classObject();
     }
 
-    public TClass<?>[] getParameterTypes() {
-        return parameterTypes.clone();
-    }
-
-    public int getParameterCount() {
-        return parameterTypes.length;
+    public TType getGenericReturnType() {
+        if (genericReturnType == null) {
+            var reflection = methodInfo.reflection();
+            if (reflection == null || reflection.genericReturnType() == null) {
+                genericReturnType = getReturnType();
+            } else {
+                genericReturnType = TGenericTypeFactory.create(this, reflection.genericReturnType());
+            }
+        }
+        return genericReturnType;
     }
 
     @Override
@@ -79,7 +58,7 @@ public class TMethod extends TAccessibleObject implements TMember {
             sb.append(' ');
         }
         sb.append(getReturnType().getName()).append(' ').append(getDeclaringClass().getName()).append('.')
-                .append(name).append('(');
+                .append(getName()).append('(');
         TClass<?>[] parameterTypes = getParameterTypes();
         if (parameterTypes.length > 0) {
             sb.append(parameterTypes[0].getName());
@@ -94,45 +73,24 @@ public class TMethod extends TAccessibleObject implements TMember {
 
     public Object invoke(Object obj, Object... args) throws TIllegalAccessException, TIllegalArgumentException,
             TInvocationTargetException {
-        if (caller == null) {
-            throw new TIllegalAccessException();
-        }
-
-        if (args.length != parameterTypes.length) {
+        if (args.length != methodInfo.parameterCount()) {
             throw new TIllegalArgumentException();
         }
 
-        if ((flags & Flags.STATIC) == 0) {
-            if (!declaringClass.isInstance((TObject) obj)) {
-                throw new TIllegalArgumentException();
-            }
-        } else if (PlatformDetector.isJavaScript()) {
-            Platform.initClass(declaringClass.getPlatformClass());
-        }
-
-        for (int i = 0; i < args.length; ++i) {
-            if (!parameterTypes[i].isPrimitive() && args[i] != null
-                    && !parameterTypes[i].isInstance((TObject) args[i])) {
-                throw new TIllegalArgumentException();
-            }
-            if (parameterTypes[i].isPrimitive() && args[i] == null) {
+        if ((methodInfo.modifiers() & ModifiersInfo.STATIC) == 0) {
+            if (!declaringClass.isInstance(obj)) {
                 throw new TIllegalArgumentException();
             }
         }
+        validateArgs(args);
+        if ((methodInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
+            declaringClass.initialize();
+        }
 
-        return caller.call(obj, args);
+        return methodInfo.call(obj, args);
     }
 
     public boolean isBridge() {
-        return (flags & Flags.BRIDGE) != 0;
-    }
-
-    @Override
-    public boolean isSynthetic() {
-        return (flags & Flags.SYNTHETIC) != 0;
-    }
-
-    public boolean isVarArgs() {
-        return (flags & Flags.VARARGS) != 0;
+        return (methodInfo.modifiers() & ModifiersInfo.BRIDGE) != 0;
     }
 }

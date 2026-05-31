@@ -24,12 +24,17 @@ import org.teavm.tooling.TeaVMSourceFilePolicy;
 
 public class DefaultSourceFileResolver implements SourceFileResolver {
     private File targetDir;
+    private String srcSubdir = "";
     private List<SourceFileProvider> sourceFileProviders;
     private TeaVMSourceFilePolicy sourceFilePolicy = TeaVMSourceFilePolicy.DO_NOTHING;
 
     public DefaultSourceFileResolver(File targetDir, List<SourceFileProvider> sourceFileProviders) {
         this.targetDir = targetDir;
         this.sourceFileProviders = sourceFileProviders;
+    }
+
+    public void setSrcSubdir(String srcSubdir) {
+        this.srcSubdir = srcSubdir;
     }
 
     public void setSourceFilePolicy(TeaVMSourceFilePolicy sourceFilePolicy) {
@@ -44,23 +49,31 @@ public class DefaultSourceFileResolver implements SourceFileResolver {
 
     @Override
     public String resolveFile(String file) throws IOException {
+        var outputDir = srcSubdir.isEmpty() ? targetDir : new File(targetDir, srcSubdir);
         for (var provider : sourceFileProviders) {
             var sourceFile = provider.getSourceFile(file);
             if (sourceFile != null) {
                 if (sourceFilePolicy == TeaVMSourceFilePolicy.COPY || sourceFile.getFile() == null) {
-                    var outputFile = new File(targetDir, file);
+                    var outputFile = new File(outputDir, file);
                     outputFile.getParentFile().mkdirs();
                     try (var input = sourceFile.open();
                             var output = new FileOutputStream(outputFile)) {
                         input.transferTo(output);
                     }
                     if (sourceFilePolicy == TeaVMSourceFilePolicy.LINK_LOCAL_FILES) {
-                        return "file://" + outputFile.getCanonicalPath();
+                        return fileToUrl(outputFile);
+                    } else {
+                        if (srcSubdir.isEmpty()) {
+                            return file;
+                        } else if (srcSubdir.endsWith("/")) {
+                            return srcSubdir + file;
+                        } else {
+                            return srcSubdir + "/" + file;
+                        }
                     }
                 } else {
-                    return "file://" + sourceFile.getFile().getCanonicalPath();
+                    return fileToUrl(sourceFile.getFile());
                 }
-                break;
             }
         }
         return null;
@@ -70,5 +83,16 @@ public class DefaultSourceFileResolver implements SourceFileResolver {
         for (var provider : sourceFileProviders) {
             provider.close();
         }
+    }
+
+    // toCanonicalFile().toURI().toString() produces URLs that aren't recognizable by Chrome in Windows
+    private static String fileToUrl(File file) throws IOException {
+        var path = file.getCanonicalPath();
+        if (!path.startsWith("/")) {
+            path = "file:///" + path.replace('\\', '/');
+        } else {
+            path = "file://" + path;
+        }
+        return path;
     }
 }

@@ -1,5 +1,5 @@
 /*
- *  Copyright 2016 Alexey Andreev.
+ *  Copyright 2026 Alexey Andreev.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,204 +15,176 @@
  */
 package org.teavm.backend.wasm.intrinsics;
 
-import java.util.stream.Collectors;
 import org.teavm.ast.ConstantExpr;
 import org.teavm.ast.InvocationExpr;
+import org.teavm.backend.wasm.BaseWasmFunctionRepository;
 import org.teavm.backend.wasm.WasmRuntime;
-import org.teavm.backend.wasm.generate.WasmClassGenerator;
+import org.teavm.backend.wasm.generate.WasmGeneratorUtil;
+import org.teavm.backend.wasm.generate.classes.WasmGCClassInfoProvider;
 import org.teavm.backend.wasm.model.WasmNumType;
-import org.teavm.backend.wasm.model.expression.WasmCall;
-import org.teavm.backend.wasm.model.expression.WasmConversion;
-import org.teavm.backend.wasm.model.expression.WasmCopy;
-import org.teavm.backend.wasm.model.expression.WasmDrop;
-import org.teavm.backend.wasm.model.expression.WasmExpression;
-import org.teavm.backend.wasm.model.expression.WasmFill;
-import org.teavm.backend.wasm.model.expression.WasmInt32Constant;
-import org.teavm.backend.wasm.model.expression.WasmInt32Subtype;
-import org.teavm.backend.wasm.model.expression.WasmInt64Subtype;
-import org.teavm.backend.wasm.model.expression.WasmIntBinary;
-import org.teavm.backend.wasm.model.expression.WasmIntBinaryOperation;
-import org.teavm.backend.wasm.model.expression.WasmIntType;
-import org.teavm.backend.wasm.model.expression.WasmLoadFloat32;
-import org.teavm.backend.wasm.model.expression.WasmLoadFloat64;
-import org.teavm.backend.wasm.model.expression.WasmLoadInt32;
-import org.teavm.backend.wasm.model.expression.WasmLoadInt64;
-import org.teavm.backend.wasm.model.expression.WasmStoreFloat32;
-import org.teavm.backend.wasm.model.expression.WasmStoreFloat64;
-import org.teavm.backend.wasm.model.expression.WasmStoreInt32;
-import org.teavm.backend.wasm.model.expression.WasmStoreInt64;
-import org.teavm.interop.Address;
+import org.teavm.backend.wasm.model.instruction.WasmInstructionBuilder;
+import org.teavm.backend.wasm.model.instruction.WasmInt32Subtype;
+import org.teavm.backend.wasm.model.instruction.WasmInt64Subtype;
+import org.teavm.backend.wasm.model.instruction.WasmIntBinaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmIntType;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
-import org.teavm.runtime.RuntimeArray;
 
-public class AddressIntrinsic implements WasmIntrinsic {
-    private WasmClassGenerator classGenerator;
+public class AddressIntrinsic implements WasmGCInlineIntrinsic {
+    private final WasmGCClassInfoProvider classInfoProvider;
+    private final BaseWasmFunctionRepository functions;
 
-    public AddressIntrinsic(WasmClassGenerator classGenerator) {
-        this.classGenerator = classGenerator;
+    public AddressIntrinsic(WasmGCClassInfoProvider classInfoProvider, BaseWasmFunctionRepository functions) {
+        this.classInfoProvider = classInfoProvider;
+        this.functions = functions;
     }
 
     @Override
-    public boolean isApplicable(MethodReference methodReference) {
-        return methodReference.getClassName().equals(Address.class.getName());
-    }
-
-    @Override
-    public WasmExpression apply(InvocationExpr invocation, WasmIntrinsicManager manager) {
+    public void apply(InvocationExpr invocation, WasmGCInlineIntrinsicContext context,
+            WasmInstructionBuilder builder) {
         switch (invocation.getMethod().getName()) {
             case "toInt":
             case "toStructure":
-                return manager.generate(invocation.getArguments().get(0));
-            case "toLong": {
-                WasmExpression value = manager.generate(invocation.getArguments().get(0));
-                return new WasmConversion(WasmNumType.INT32, WasmNumType.INT64, false, value);
-            }
+                context.generate(builder, invocation.getArguments().get(0));
+                break;
+            case "toLong":
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.convert(WasmNumType.INT32, WasmNumType.INT64, false);
+                break;
             case "fromInt":
-            case "ofObject":
-                return manager.generate(invocation.getArguments().get(0));
-            case "fromLong": {
-                WasmExpression value = manager.generate(invocation.getArguments().get(0));
-                return new WasmConversion(WasmNumType.INT64, WasmNumType.INT32, false, value);
-            }
+                context.generate(builder, invocation.getArguments().get(0));
+                break;
+            case "fromLong":
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.convert(WasmNumType.INT64, WasmNumType.INT32, false);
+                break;
             case "add": {
-                WasmExpression base = manager.generate(invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(0));
                 if (invocation.getMethod().parameterCount() == 1) {
-                    WasmExpression offset = manager.generate(invocation.getArguments().get(1));
+                    context.generate(builder, invocation.getArguments().get(1));
                     if (invocation.getMethod().parameterType(0) == ValueType.LONG) {
-                        offset = new WasmConversion(WasmNumType.INT64, WasmNumType.INT32, false, offset);
+                        builder.convert(WasmNumType.INT64, WasmNumType.INT32, false);
                     }
-                    return new WasmIntBinary(WasmIntType.INT32, WasmIntBinaryOperation.ADD, base, offset);
                 } else {
-                    WasmExpression offset = manager.generate(invocation.getArguments().get(2));
-                    Object type = ((ConstantExpr) invocation.getArguments().get(1)).getValue();
-                    String className = ((ValueType.Object) type).getClassName();
-                    int size = classGenerator.getClassSize(className);
-                    int alignment = classGenerator.getClassAlignment(className);
-                    size = WasmClassGenerator.align(size, alignment);
-
-                    offset = new WasmIntBinary(WasmIntType.INT32, WasmIntBinaryOperation.MUL, offset,
-                            new WasmInt32Constant(size));
-                    return new WasmIntBinary(WasmIntType.INT32, WasmIntBinaryOperation.ADD, base, offset);
+                    var type = ((ConstantExpr) invocation.getArguments().get(1)).getValue();
+                    var className = ((ValueType.Object) type).getClassName();
+                    int size = classInfoProvider.getHeapSize(className);
+                    int alignment = classInfoProvider.getHeapAlignment(className);
+                    size = WasmGeneratorUtil.align(size, alignment);
+                    context.generate(builder, invocation.getArguments().get(2));
+                    builder.i32Const(size).intBinary(WasmIntType.INT32, WasmIntBinaryOperation.MUL);
                 }
+                builder.intBinary(WasmIntType.INT32, WasmIntBinaryOperation.ADD);
+                break;
             }
             case "getByte":
-                return new WasmLoadInt32(1, manager.generate(invocation.getArguments().get(0)),
-                        WasmInt32Subtype.INT8);
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.loadI32(1, 0, WasmInt32Subtype.INT8);
+                break;
             case "getShort":
-                return new WasmLoadInt32(2, manager.generate(invocation.getArguments().get(0)),
-                        WasmInt32Subtype.INT16);
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.loadI32(2, 0, WasmInt32Subtype.INT16);
+                break;
             case "getChar":
-                return new WasmLoadInt32(2, manager.generate(invocation.getArguments().get(0)),
-                        WasmInt32Subtype.UINT16);
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.loadI32(2, 0, WasmInt32Subtype.UINT16);
+                break;
             case "getAddress":
             case "getInt":
-                return new WasmLoadInt32(4, manager.generate(invocation.getArguments().get(0)),
-                        WasmInt32Subtype.INT32);
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.loadI32(4, 0, WasmInt32Subtype.INT32);
+                break;
             case "getLong":
-                return new WasmLoadInt64(8, manager.generate(invocation.getArguments().get(0)),
-                        WasmInt64Subtype.INT64);
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.loadI64(8, 0, WasmInt64Subtype.INT64);
+                break;
             case "getFloat":
-                return new WasmLoadFloat32(4, manager.generate(invocation.getArguments().get(0)));
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.loadF32(4, 0);
+                break;
             case "getDouble":
-                return new WasmLoadFloat64(8, manager.generate(invocation.getArguments().get(0)));
-            case "putByte": {
-                WasmExpression address = manager.generate(invocation.getArguments().get(0));
-                WasmExpression value = manager.generate(invocation.getArguments().get(1));
-                return new WasmStoreInt32(1, address, value, WasmInt32Subtype.INT8);
-            }
-            case "putShort": {
-                WasmExpression address = manager.generate(invocation.getArguments().get(0));
-                WasmExpression value = manager.generate(invocation.getArguments().get(1));
-                return new WasmStoreInt32(2, address, value, WasmInt32Subtype.INT16);
-            }
-            case "putChar": {
-                WasmExpression address = manager.generate(invocation.getArguments().get(0));
-                WasmExpression value = manager.generate(invocation.getArguments().get(1));
-                return new WasmStoreInt32(2, address, value, WasmInt32Subtype.UINT16);
-            }
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.loadF64(8, 0);
+                break;
+            case "putByte":
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.storeI32(1, 0, WasmInt32Subtype.INT8);
+                break;
+            case "putShort":
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.storeI32(2, 0, WasmInt32Subtype.INT16);
+                break;
+            case "putChar":
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.storeI32(2, 0, WasmInt32Subtype.UINT16);
+                break;
             case "putAddress":
-            case "putInt": {
-                WasmExpression address = manager.generate(invocation.getArguments().get(0));
-                WasmExpression value = manager.generate(invocation.getArguments().get(1));
-                return new WasmStoreInt32(4, address, value, WasmInt32Subtype.INT32);
-            }
-            case "putLong": {
-                WasmExpression address = manager.generate(invocation.getArguments().get(0));
-                WasmExpression value = manager.generate(invocation.getArguments().get(1));
-                return new WasmStoreInt64(8, address, value, WasmInt64Subtype.INT64);
-            }
-            case "putFloat": {
-                WasmExpression address = manager.generate(invocation.getArguments().get(0));
-                WasmExpression value = manager.generate(invocation.getArguments().get(1));
-                return new WasmStoreFloat32(4, address, value);
-            }
-            case "putDouble": {
-                WasmExpression address = manager.generate(invocation.getArguments().get(0));
-                WasmExpression value = manager.generate(invocation.getArguments().get(1));
-                return new WasmStoreFloat64(8, address, value);
-            }
+            case "putInt":
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.storeI32(4, 0, WasmInt32Subtype.INT32);
+                break;
+            case "putLong":
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.storeI64(8, 0, WasmInt64Subtype.INT64);
+                break;
+            case "putFloat":
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.storeF32(4, 0);
+                break;
+            case "putDouble":
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.storeF64(8, 0);
+                break;
             case "sizeOf":
-                return new WasmInt32Constant(4);
+                builder.i32Const(4);
+                break;
             case "align": {
-                MethodReference delegate = new MethodReference(WasmRuntime.class.getName(),
+                var delegate = new MethodReference(WasmRuntime.class.getName(),
                         invocation.getMethod().getDescriptor());
-                WasmCall call = new WasmCall(manager.getFunctions().forStaticMethod(delegate));
-                call.getArguments().addAll(invocation.getArguments().stream()
-                        .map(arg -> manager.generate(arg))
-                        .collect(Collectors.toList()));
-                return call;
+                for (var arg : invocation.getArguments()) {
+                    context.generate(builder, arg);
+                }
+                builder.call(functions.forStaticMethod(delegate));
+                break;
             }
             case "isLessThan":
-                return new WasmIntBinary(WasmIntType.INT32, WasmIntBinaryOperation.LT_UNSIGNED,
-                        manager.generate(invocation.getArguments().get(0)),
-                        manager.generate(invocation.getArguments().get(1)));
-            case "ofData": {
-                ValueType.Array type = (ValueType.Array) invocation.getMethod().parameterType(0);
-                int alignment = getAlignment(type.getItemType());
-                int start = WasmClassGenerator.align(classGenerator.getClassSize(RuntimeArray.class.getName()),
-                        alignment);
-                return new WasmIntBinary(WasmIntType.INT32, WasmIntBinaryOperation.ADD,
-                        manager.generate(invocation.getArguments().get(0)), new WasmInt32Constant(start));
-            }
-            case "pin":
-                return new WasmDrop(new WasmInt32Constant(0));
-            case "diff": {
-                WasmExpression result = new WasmIntBinary(WasmIntType.INT32, WasmIntBinaryOperation.SUB,
-                        manager.generate(invocation.getArguments().get(0)),
-                        manager.generate(invocation.getArguments().get(1))
-                );
-                result = new WasmConversion(WasmNumType.INT32, WasmNumType.INT64, true, result);
-                result.setLocation(invocation.getLocation());
-                return result;
-            }
-            case "fill": {
-                var fill = new WasmFill();
-                fill.setIndex(manager.generate(invocation.getArguments().get(0)));
-                fill.setValue(manager.generate(invocation.getArguments().get(1)));
-                fill.setCount(manager.generate(invocation.getArguments().get(2)));
-                return fill;
-            }
-            case "fillZero": {
-                var fill = new WasmFill();
-                fill.setIndex(manager.generate(invocation.getArguments().get(0)));
-                fill.setValue(new WasmInt32Constant(0));
-                fill.setCount(manager.generate(invocation.getArguments().get(1)));
-                return fill;
-            }
-            case "moveMemoryBlock": {
-                var copy = new WasmCopy();
-                copy.setSourceIndex(manager.generate(invocation.getArguments().get(0)));
-                copy.setDestinationIndex(manager.generate(invocation.getArguments().get(1)));
-                copy.setCount(manager.generate(invocation.getArguments().get(2)));
-                return copy;
-            }
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.intBinary(WasmIntType.INT32, WasmIntBinaryOperation.LT_UNSIGNED);
+                break;
+            case "diff":
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.intBinary(WasmIntType.INT32, WasmIntBinaryOperation.SUB)
+                        .convert(WasmNumType.INT32, WasmNumType.INT64, true);
+                break;
+            case "fill":
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(1));
+                context.generate(builder, invocation.getArguments().get(2));
+                builder.fill();
+                break;
+            case "fillZero":
+                context.generate(builder, invocation.getArguments().get(0));
+                builder.i32Const(0);
+                context.generate(builder, invocation.getArguments().get(1));
+                builder.fill();
+                break;
+            case "moveMemoryBlock":
+                context.generate(builder, invocation.getArguments().get(1));
+                context.generate(builder, invocation.getArguments().get(0));
+                context.generate(builder, invocation.getArguments().get(2));
+                builder.copy();
+                break;
             default:
                 throw new IllegalArgumentException(invocation.getMethod().toString());
         }
-    }
-
-    private static int getAlignment(ValueType type) {
-        return WasmClassGenerator.getTypeSize(type);
     }
 }

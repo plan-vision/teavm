@@ -41,8 +41,6 @@ import org.teavm.backend.javascript.JavaScriptTarget;
 import org.teavm.backend.wasm.WasmDebugInfoLevel;
 import org.teavm.backend.wasm.WasmDebugInfoLocation;
 import org.teavm.backend.wasm.WasmGCTarget;
-import org.teavm.backend.wasm.WasmRuntimeType;
-import org.teavm.backend.wasm.WasmTarget;
 import org.teavm.backend.wasm.debug.sourcemap.SourceMapBuilder;
 import org.teavm.backend.wasm.render.WasmBinaryVersion;
 import org.teavm.cache.AlwaysStaleCacheStatus;
@@ -66,6 +64,8 @@ import org.teavm.model.PreOptimizingClassHolderSource;
 import org.teavm.model.ReferenceCache;
 import org.teavm.model.transformation.AssertionRemoval;
 import org.teavm.parsing.ClasspathClassHolderSource;
+import org.teavm.parsing.ClasspathResourceProvider;
+import org.teavm.parsing.resource.ResourceProvider;
 import org.teavm.tooling.sources.DefaultSourceFileResolver;
 import org.teavm.tooling.sources.SourceFileProvider;
 import org.teavm.vm.BuildTarget;
@@ -96,6 +96,7 @@ public class TeaVMTool {
     private List<String> classesToPreserve = new ArrayList<>();
     private TeaVMToolLog log = new EmptyTeaVMToolLog();
     private ClassLoader classLoader = TeaVMTool.class.getClassLoader();
+    private List<File> classPath;
     private DiskCachedClassReaderSource cachedClassSource;
     private DiskProgramCache programCache;
     private DiskMethodNodeCache astCache;
@@ -110,17 +111,15 @@ public class TeaVMTool {
     private List<SourceFileProvider> sourceFileProviders = new ArrayList<>();
     private DebugInformationBuilder debugEmitter;
     private JavaScriptTarget javaScriptTarget;
-    private WasmTarget webAssemblyTarget;
     private WasmBinaryVersion wasmVersion = WasmBinaryVersion.V_0x1;
     private WasmDebugInfoLocation wasmDebugInfoLocation = WasmDebugInfoLocation.EXTERNAL;
     private WasmDebugInfoLevel wasmDebugInfoLevel = WasmDebugInfoLevel.DEOBFUSCATION;
-    private boolean wasmExceptionsUsed;
     private CTarget cTarget;
     private Set<File> generatedFiles = new HashSet<>();
     private int minHeapSize = 4 * (1 << 20);
     private int maxHeapSize = 128 * (1 << 20);
     private int minDirectBuffersSize = 2 * (1 << 20);
-    private int maxDirectBuffersSize = 32 * (1 << 20);
+    private boolean sharedBuffer;
     private ReferenceCache referenceCache;
     private boolean heapDump;
     private boolean shortFileNames;
@@ -274,8 +273,8 @@ public class TeaVMTool {
         this.minDirectBuffersSize = minDirectBuffersSize;
     }
 
-    public void setMaxDirectBuffersSize(int maxDirectBuffersSize) {
-        this.maxDirectBuffersSize = maxDirectBuffersSize;
+    public void setSharedBuffer(boolean sharedBuffer) {
+        this.sharedBuffer = sharedBuffer;
     }
 
     public ClassLoader getClassLoader() {
@@ -286,16 +285,16 @@ public class TeaVMTool {
         this.classLoader = classLoader;
     }
 
+    public void setClassPath(List<File> classPath) {
+        this.classPath = classPath;
+    }
+
     public WasmBinaryVersion getWasmVersion() {
         return wasmVersion;
     }
 
     public void setWasmVersion(WasmBinaryVersion wasmVersion) {
         this.wasmVersion = wasmVersion;
-    }
-
-    public void setWasmExceptionsUsed(boolean wasmExceptionsUsed) {
-        this.wasmExceptionsUsed = wasmExceptionsUsed;
     }
 
     public void setWasmDebugInfoLocation(WasmDebugInfoLocation wasmDebugInfoLocation) {
@@ -358,10 +357,6 @@ public class TeaVMTool {
         switch (targetType) {
             case JAVASCRIPT:
                 return prepareJavaScriptTarget();
-            case WEBASSEMBLY:
-                return prepareWebAssemblyDefaultTarget();
-            case WEBASSEMBLY_WASI:
-                return prepareWebAssemblyWasiTarget();
             case WEBASSEMBLY_GC:
                 return prepareWebAssemblyGCTarget();
             case C:
@@ -384,31 +379,6 @@ public class TeaVMTool {
         return javaScriptTarget;
     }
 
-    private WasmTarget prepareWebAssemblyTarget() {
-        webAssemblyTarget = new WasmTarget();
-        webAssemblyTarget.setDebugging(debugInformationGenerated);
-        webAssemblyTarget.setCEmitted(debugInformationGenerated);
-        webAssemblyTarget.setWastEmitted(debugInformationGenerated);
-        webAssemblyTarget.setVersion(wasmVersion);
-        webAssemblyTarget.setMinHeapSize(minHeapSize);
-        webAssemblyTarget.setMaxHeapSize(maxHeapSize);
-        webAssemblyTarget.setObfuscated(obfuscated);
-        webAssemblyTarget.setExceptionsUsed(wasmExceptionsUsed);
-        return webAssemblyTarget;
-    }
-
-    private WasmTarget prepareWebAssemblyDefaultTarget() {
-        WasmTarget target = prepareWebAssemblyTarget();
-        target.setRuntimeType(WasmRuntimeType.TEAVM);
-        return target;
-    }
-
-    private WasmTarget prepareWebAssemblyWasiTarget() {
-        WasmTarget target = prepareWebAssemblyTarget();
-        target.setRuntimeType(WasmRuntimeType.WASI);
-        return target;
-    }
-
     private WasmGCTarget prepareWebAssemblyGCTarget() {
         var target = new WasmGCTarget();
         target.setObfuscated(obfuscated);
@@ -417,7 +387,7 @@ public class TeaVMTool {
         target.setDebugInfoLevel(debugInformationGenerated ? WasmDebugInfoLevel.FULL : wasmDebugInfoLevel);
         target.setDebugInfoLocation(wasmDebugInfoLocation);
         target.setBufferHeapMinSize(minDirectBuffersSize);
-        target.setBufferHeapMaxSize(maxDirectBuffersSize);
+        target.setSharedBuffer(sharedBuffer);
         if (sourceMapsFileGenerated) {
             wasmSourceMapWriter = new SourceMapBuilder();
             target.setSourceMapBuilder(wasmSourceMapWriter);
@@ -440,7 +410,7 @@ public class TeaVMTool {
     }
 
     public void generate() throws TeaVMToolException {
-        try {
+        try (var resourceProvider = createResourceProvider()) {
             cancelled = false;
             log.info("Running TeaVM");
             referenceCache = new ReferenceCache();
@@ -452,8 +422,8 @@ public class TeaVMTool {
                 symbolTable = new FileSymbolTable(new File(cacheDirectory, "symbols"));
                 fileTable = new FileSymbolTable(new File(cacheDirectory, "files"));
                 variableTable = new FileSymbolTable(new File(cacheDirectory, "variables"));
-                ClasspathClassHolderSource innerClassSource = new ClasspathClassHolderSource(classLoader,
-                        referenceCache);
+                ClasspathClassHolderSource innerClassSource = new ClasspathClassHolderSource(resourceProvider,
+                        referenceCache, classLoader);
                 ClassHolderSource classSource = new PreOptimizingClassHolderSource(innerClassSource);
                 cachedClassSource = new DiskCachedClassReaderSource(cacheDirectory, referenceCache, symbolTable,
                         fileTable, variableTable, classSource, innerClassSource);
@@ -475,10 +445,11 @@ public class TeaVMTool {
                 cacheStatus = cachedClassSource;
             } else {
                 vmBuilder.setClassLoader(classLoader).setClassSource(new PreOptimizingClassHolderSource(
-                        new ClasspathClassHolderSource(classLoader, referenceCache)));
+                        new ClasspathClassHolderSource(resourceProvider, referenceCache, classLoader)));
                 cacheStatus = AlwaysStaleCacheStatus.INSTANCE;
             }
 
+            vmBuilder.setResourceProvider(resourceProvider);
             vmBuilder.setDependencyAnalyzerFactory(fastDependencyAnalysis
                     ? FastDependencyAnalyzer::new
                     : PreciseDependencyAnalyzer::new);
@@ -569,13 +540,17 @@ public class TeaVMTool {
         }
     }
 
+    private ResourceProvider createResourceProvider() {
+        return classPath != null
+                ? ResourceProvider.ofClassPath(classPath)
+                : new ClasspathResourceProvider(classLoader);
+    }
+
     private String getResolvedTargetFileName() {
         if (targetFileName.isEmpty()) {
             switch (targetType) {
                 case JAVASCRIPT:
                     return "classes.js";
-                case WEBASSEMBLY:
-                case WEBASSEMBLY_WASI:
                 case WEBASSEMBLY_GC:
                     return "classes.wasm";
                 case C:
@@ -615,8 +590,8 @@ public class TeaVMTool {
 
     private void additionalWasmGCOutput() throws IOException {
         if (sourceMapsFileGenerated) {
-            var targetDir = new File(targetDirectory, "src");
-            var resolver = new DefaultSourceFileResolver(targetDir, sourceFileProviders);
+            var resolver = new DefaultSourceFileResolver(targetDirectory, sourceFileProviders);
+            resolver.setSrcSubdir("src");
             resolver.setSourceFilePolicy(sourceFilePolicy);
             resolver.open();
 

@@ -148,9 +148,6 @@ public class TeaVMCompileMojo extends AbstractMojo {
     @Parameter(property = "teavm.wasmVersion", defaultValue = "V_0x1")
     private WasmBinaryVersion wasmVersion = WasmBinaryVersion.V_0x1;
 
-    @Parameter(property = "teavm.wasmExceptionsUsed", defaultValue = "false")
-    private boolean wasmExceptionsUsed;
-
     @Parameter(property = "teavm.minHeapSize", defaultValue = "4")
     private int minHeapSize;
 
@@ -161,7 +158,15 @@ public class TeaVMCompileMojo extends AbstractMojo {
     private int minDirectBuffersSize;
 
     @Parameter(property = "teavm.maxDirectBuffersSize", defaultValue = "32")
+    @Deprecated
     private int maxDirectBuffersSize;
+
+    @Parameter(property = "teavm.importedWasmMemory", defaultValue = "false")
+    @Deprecated
+    private boolean importedWasmMemory;
+
+    @Parameter(property = "teavm.sharedBuffer", defaultValue = "false")
+    public boolean sharedBuffer;
 
     @Parameter(property = "teavm.outOfProcess", defaultValue = "false")
     private boolean outOfProcess;
@@ -207,7 +212,7 @@ public class TeaVMCompileMojo extends AbstractMojo {
             builder.setMinHeapSize(minHeapSize * 1024 * 1024);
             builder.setMaxHeapSize(maxHeapSize * 1024 * 1024);
             builder.setMinDirectBuffersSize(minDirectBuffersSize * 1024 * 1024);
-            builder.setMaxDirectBuffersSize(maxDirectBuffersSize * 1024 * 1024);
+            builder.setSharedBuffer(sharedBuffer);
             builder.setShortFileNames(shortFileNames);
             builder.setAssertionsRemoved(assertionsRemoved);
         } catch (RuntimeException e) {
@@ -319,7 +324,6 @@ public class TeaVMCompileMojo extends AbstractMojo {
             builder.setCacheDirectory(cacheDirectory.getAbsolutePath());
             builder.setTargetType(targetType);
             builder.setWasmVersion(wasmVersion);
-            builder.setWasmExceptionsUsed(wasmExceptionsUsed);
             builder.setHeapDump(heapDump);
             BuildResult result;
             result = builder.build();

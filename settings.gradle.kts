@@ -1,5 +1,3 @@
-import org.teavm.buildutil.DependencyRelocationExtension
-
 /*
  *  Copyright 2023 Alexey Andreev.
  *
@@ -24,13 +22,14 @@ pluginManagement {
 }
 plugins {
     id("dependency-relocation")
-    id("org.gradle.toolchains.foojay-resolver-convention") version "0.4.0"
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
 rootProject.name = "teavm"
 
 include("core")
 include("interop:core")
+include("extension:apis", "extension:spi", "extension:spi-util", "extension:processor")
 include("metaprogramming:api", "metaprogramming:impl")
 include("jso:core", "jso:apis", "jso:impl")
 include("platform")
@@ -40,7 +39,9 @@ include("tools:browser-runner")
 include("tools:deobfuscator-js")
 include("tools:deobfuscator-wasm-gc")
 include("tools:junit")
-include("tools:devserver")
+include("tools:devserver:core")
+include("tools:devserver:runner")
+include("tools:devserver:client")
 include("tools:c-incremental")
 include("tools:chrome-rdp")
 include("tools:cli")
@@ -125,12 +126,7 @@ fun MavenPom.setupPom(project: Project) {
     url = "https://teavm.org"
 }
 
-extensions.configure<DependencyRelocationExtension> {
-    for (commonsLib in listOf("commons-io", "commons-cli")) {
-        library("libs", commonsLib) {
-            relocate("org.apache.commons", "org.teavm.apachecommons")
-        }
-    }
+dependencyRelocation {
     for (asmLib in listOf("asm", "asm-tree", "asm-analysis", "asm-commons", "asm-util")) {
         library("libs", asmLib) {
             relocate("org.objectweb.asm", "org.teavm.asm")

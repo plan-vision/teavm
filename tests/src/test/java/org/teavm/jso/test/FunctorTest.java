@@ -16,6 +16,7 @@
 package org.teavm.jso.test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -40,6 +41,7 @@ public class FunctorTest {
     @Test
     public void functorPassed() {
         assertEquals("(5)", testMethod((a, b) -> a + b, 2, 3));
+        assertEquals("null", testMethod(null, 2, 3));
     }
 
     @Test
@@ -108,8 +110,27 @@ public class FunctorTest {
         var result = acceptJavaClass(obj -> "(" + obj.getFoo() + ")", new JavaClassWithExportedMembers());
         assertEquals("(fromJava: foo): js", result);
     }
+    
+    @Test
+    public void varargs() {
+        var result = acceptVarargs((first, remaining) -> {
+            var sb = new StringBuilder();
+            sb.append(first).append("|");
+            for (var rem : remaining) {
+                sb.append(rem).append(";");
+            }
+            return sb.toString();
+        });
+        assertEquals("called:23|foo;bar;", result);
+    }
 
-    @JSBody(params = { "f", "a", "b" }, script = "return '(' + f(a, b) + ')';")
+    @Test
+    public void functorFromNull() {
+        var f = nullFunction();
+        assertNull(f);
+    }
+
+    @JSBody(params = { "f", "a", "b" }, script = "return f != null ? '(' + f(a, b) + ')' : 'null';")
     private static native String testMethod(JSBiFunction f, int a, int b);
 
     @JSBody(params = { "f", "a", "b" }, script = "return '(' + f(a, b) + ')';")
@@ -196,6 +217,9 @@ public class FunctorTest {
     @JSBody(params = { "functor", "obj" }, script = "return functor(obj) + ': js';")
     private static native String acceptJavaClass(FunctorTakingJavaClass functor, Object obj);
 
+    @JSBody(params = "functor", script = "return 'called:' + functor(23, 'foo', 'bar');")
+    private static native String acceptVarargs(FunctorWithVarargs functor);
+
     @JSFunctor
     interface FunctorTakingJavaClass extends JSObject {
         String accept(JavaClassWithExportedMembers obj);
@@ -208,4 +232,12 @@ public class FunctorTest {
             return "fromJava: foo";
         }
     }
+    
+    @JSFunctor
+    interface FunctorWithVarargs extends JSObject {
+        String accept(int first, String... remaining);
+    }
+
+    @JSBody(script = "return null")
+    private static native JSBiFunction nullFunction();
 }

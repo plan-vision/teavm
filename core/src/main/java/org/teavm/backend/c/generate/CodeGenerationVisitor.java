@@ -30,6 +30,7 @@ import java.nio.LongBuffer;
 import java.nio.ShortBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
@@ -41,6 +42,7 @@ import org.teavm.ast.ArrayFromDataExpr;
 import org.teavm.ast.ArrayType;
 import org.teavm.ast.AssignmentStatement;
 import org.teavm.ast.BinaryExpr;
+import org.teavm.ast.BinaryOperation;
 import org.teavm.ast.BlockStatement;
 import org.teavm.ast.BoundCheckExpr;
 import org.teavm.ast.BreakStatement;
@@ -197,7 +199,8 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
         pushLocation(expr.getLocation());
         try {
             switch (expr.getOperation()) {
-                case COMPARE:
+                case COMPARE_LESS:
+                case COMPARE_GREATER:
                     writer.print("teavm_compare_");
                     switch (expr.getType()) {
                         case INT:
@@ -208,9 +211,15 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
                             break;
                         case FLOAT:
                             writer.print("float");
+                            if (expr.getOperation() == BinaryOperation.COMPARE_LESS) {
+                                writer.print("_less");
+                            }
                             break;
                         case DOUBLE:
                             writer.print("double");
+                            if (expr.getOperation() == BinaryOperation.COMPARE_LESS) {
+                                writer.print("_less");
+                            }
                             break;
                     }
                     writer.print("(");
@@ -728,13 +737,14 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
                 arguments.get(i).acceptVisitor(this);
                 writer.print(", ").printStrictType(((ValueType.Array) type).getItemType()).print(")");
             } else if (isPrimitiveBuffer(type)) {
-                writer.print("TEAVM_ARRAY_DATA(TEAVM_FIELD(");
-                String typeName = ((ValueType.Object) type).getClassName();
+                withCallSite();
+                writer.print(names.forMethod(new MethodReference("java.nio.NativeBufferUtil",
+                        "getAddress", ValueType.object("java.nio.Buffer"),
+                        ValueType.object(Address.class.getName()))));
+                includes.includeClass("java.nio.NativeBufferUtil");
+                writer.print("(");
                 arguments.get(i).acceptVisitor(this);
-                includes.includeClass(typeName);
-                writer.print(", ").print(names.forClass(typeName)).print(", ")
-                        .print(names.forMemberField(new FieldReference(typeName, "array"))).print(")");
-                writer.print(", ").print(BUFFER_TYPES.get(typeName)).print(")");
+                writer.print("))");
             } else {
                 arguments.get(i).acceptVisitor(this);
             }
@@ -936,10 +946,10 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
         }
 
         ValueType type = ValueType.arrayOf(expr.getType());
-        writer.print(names.forMethod(ALLOC_ARRAY_METHOD)).print("(&")
-                .print(names.forClassInstance(type)).print(", ");
+        writer.print(names.forMethod(ALLOC_ARRAY_METHOD)).print("(");
+        CodeGeneratorUtil.writeTypeReference(writer, context, includes, type);
+        writer.print(", ");
         classContext.importMethod(ALLOC_ARRAY_METHOD, true);
-        includes.includeType(type);
         expr.getLength().acceptVisitor(this);
         writer.print(")");
 
@@ -993,10 +1003,10 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
         writer.print("(");
 
         ValueType type = ValueType.arrayOf(expr.getType());
-        writer.print(names.forMethod(ALLOC_ARRAY_METHOD)).print("(&")
-                .print(names.forClassInstance(type)).print(", ");
         classContext.importMethod(ALLOC_ARRAY_METHOD, true);
-        includes.includeType(type);
+        writer.print(names.forMethod(ALLOC_ARRAY_METHOD)).print("(");
+        CodeGeneratorUtil.writeTypeReference(writer, context, includes, type);
+        writer.print(", ");
         writer.print(expr.getData().size() + ")");
 
         for (Expr element : expr.getData()) {
@@ -1023,10 +1033,10 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
             withCallSite();
         }
 
-        writer.print(names.forMethod(ALLOC_MULTI_ARRAY_METHOD)).print("(&")
-                .print(names.forClassInstance(expr.getType())).print(", ");
+        writer.print(names.forMethod(ALLOC_MULTI_ARRAY_METHOD)).print("(");
+        CodeGeneratorUtil.writeTypeReference(writer, context, includes, expr.getType());
+        writer.print(", ");
         classContext.importMethod(ALLOC_MULTI_ARRAY_METHOD, true);
-        includes.includeType(expr.getType());
 
         writer.print("(int32_t[]) {");
         expr.getDimensions().get(0).acceptVisitor(this);
@@ -1049,8 +1059,11 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
         pushLocation(expr.getLocation());
         writer.print("teavm_instanceof(");
         visitReference(expr.getExpr());
-        includes.includeType(expr.getType());
-        writer.print(", ").print(names.forSupertypeFunction(expr.getType())).print(")");
+        writer.print(", ");
+        CodeGeneratorUtil.writeTypeReference(writer, context, includes, expr.getType());
+        writer.print(", ");
+        CodeGeneratorUtil.writeIsSupertypeFunctionRef(writer, context, includes, expr.getType());
+        writer.print(")");
         popLocation(expr.getLocation());
     }
 
@@ -1079,8 +1092,11 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
 
         writer.print("teavm_checkcast(");
         visitReference(expr.getValue());
-        includes.includeType(expr.getTarget());
-        writer.print(", ").print(names.forSupertypeFunction(expr.getTarget())).print(")");
+        writer.print(", ");
+        CodeGeneratorUtil.writeTypeReference(writer, context, includes, expr.getTarget());
+        writer.print(", ");
+        CodeGeneratorUtil.writeIsSupertypeFunctionRef(writer, context, includes, expr.getTarget());
+        writer.print(")");
 
         if (needParenthesis) {
             writer.print(")");
@@ -1380,7 +1396,11 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
         }
 
         includes.includeClass(statement.getClassName());
-        writer.print(names.forClassInitializer(statement.getClassName()) + "()");
+        writer.print("teavm_initializeClass((TeaVM_Class*) &")
+                .print(names.forClassInstance(ValueType.object(statement.getClassName())))
+                .print(", &")
+                .print(names.forClassInitializer(statement.getClassName()))
+                .print(")");
 
         if (needParenthesis) {
             writer.print(")");
@@ -1394,6 +1414,7 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
     public void visit(TryCatchStatement statement) {
         List<TryCatchStatement> tryCatchStatements = new ArrayList<>();
         List<int[]> restoredVariablesByHandler = new ArrayList<>();
+        var variablesToBackup = new IntHashSet();
         while (true) {
             if (statement.getProtectedBody().size() != 1) {
                 break;
@@ -1405,9 +1426,12 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
             tryCatchStatements.add(statement);
             restoredVariablesByHandler.add(volatileDefinitions.variablesToRestore(statement));
             statement = (TryCatchStatement) next;
+
+            variablesToBackup.addAll(volatileDefinitions.variablesToBackup(statement));
         }
         tryCatchStatements.add(statement);
         restoredVariablesByHandler.add(volatileDefinitions.variablesToRestore(statement));
+        variablesToBackup.addAll(volatileDefinitions.variablesToBackup(statement));
 
         int firstId = handlers.size();
         for (int i = 0; i < tryCatchStatements.size(); ++i) {
@@ -1416,6 +1440,14 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
         }
 
         writer.println("TEAVM_TRY").indent();
+
+        var varsToBackupArray = variablesToBackup.toArray();
+        Arrays.sort(varsToBackupArray);
+        for (var varToBackup : varsToBackupArray) {
+            spilledVariables.add(varToBackup);
+            writer.println("teavm_spill_" + varToBackup + " = " + getVariableName(varToBackup) + ";");
+        }
+
         tryDepth++;
         visitMany(statement.getProtectedBody());
         tryDepth--;
@@ -1586,6 +1618,11 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
         @Override
         public void importMethod(MethodReference method, boolean isStatic) {
             classContext.importMethod(method, isStatic);
+        }
+
+        @Override
+        public void emitCallSite() {
+            withCallSite();
         }
     };
 

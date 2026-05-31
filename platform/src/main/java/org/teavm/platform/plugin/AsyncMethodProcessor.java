@@ -21,6 +21,7 @@ import java.util.List;
 import org.teavm.backend.javascript.spi.GeneratedBy;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
+import org.teavm.interop.NativeAsync;
 import org.teavm.model.AnnotationHolder;
 import org.teavm.model.AnnotationValue;
 import org.teavm.model.BasicBlock;
@@ -62,7 +63,8 @@ public class AsyncMethodProcessor implements ClassHolderTransformer {
         for (var method : List.copyOf(cls.getMethods())) {
             if (method.hasModifier(ElementModifier.NATIVE)
                     && method.getAnnotations().get(Async.class.getName()) != null
-                    && method.getAnnotations().get(GeneratedBy.class.getName()) == null) {
+                    && method.getAnnotations().get(GeneratedBy.class.getName()) == null
+                    && method.getAnnotations().get(NativeAsync.class.getName()) == null) {
                 ValueType[] signature = new ValueType[method.parameterCount() + 2];
                 for (int i = 0; i < method.parameterCount(); ++i) {
                     signature[i] = method.parameterType(i);
@@ -274,7 +276,7 @@ public class AsyncMethodProcessor implements ClassHolderTransformer {
                 call.setMethod(new MethodReference(Boolean.class, "booleanValue", boolean.class));
                 break;
             case BYTE:
-                call.setMethod(new MethodReference(Byte.class, "byteValue", boolean.class));
+                call.setMethod(new MethodReference(Byte.class, "byteValue", byte.class));
                 break;
             case SHORT:
                 call.setMethod(new MethodReference(Short.class, "shortValue", short.class));
@@ -286,13 +288,13 @@ public class AsyncMethodProcessor implements ClassHolderTransformer {
                 call.setMethod(new MethodReference(Integer.class, "intValue", int.class));
                 break;
             case LONG:
-                call.setMethod(new MethodReference(Long.class, "longValue", int.class));
+                call.setMethod(new MethodReference(Long.class, "longValue", long.class));
                 break;
             case FLOAT:
-                call.setMethod(new MethodReference(Float.class, "floatValue", int.class));
+                call.setMethod(new MethodReference(Float.class, "floatValue", float.class));
                 break;
             case DOUBLE:
-                call.setMethod(new MethodReference(Double.class, "doubleValue", int.class));
+                call.setMethod(new MethodReference(Double.class, "doubleValue", double.class));
                 break;
         }
 

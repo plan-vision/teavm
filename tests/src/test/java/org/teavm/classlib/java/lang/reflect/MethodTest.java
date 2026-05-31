@@ -16,14 +16,23 @@
 package org.teavm.classlib.java.lang.reflect;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import java.io.IOException;
+import java.lang.annotation.Inherited;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.teavm.classlib.support.Reflectable;
@@ -34,7 +43,7 @@ import org.teavm.junit.TestPlatform;
 
 @RunWith(TeaVMTestRunner.class)
 @EachTestCompiledSeparately
-@SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
+@SkipPlatform(TestPlatform.C)
 public class MethodTest {
     @Test
     public void methodsEnumerated() {
@@ -158,6 +167,119 @@ public class MethodTest {
         }
         assertEquals("g:23", sb.toString());
     }
+    
+    @Test
+    public void invokeStaticMethodWithoutInitializer() throws Exception {
+        var method = ClassWithoutInitializerWithStaticMethod.class.getDeclaredMethod("foo");
+        assertEquals("result:foo", method.invoke(null));
+    }
+    
+    @Test
+    public void methodAnnotationsRead() throws Exception {
+        var acceptMethod = Foo.class.getMethod("accept", long.class);
+        var barMethod = Foo.class.getMethod("bar", Object.class);
+        assertEquals(List.of("TestAnnot"), extractAnnotations(acceptMethod));
+        assertEquals(List.of(), extractAnnotations(barMethod));
+
+        assertEquals(TestAnnot.class, acceptMethod.getAnnotation(TestAnnot.class).annotationType());
+        assertNull(barMethod.getAnnotation(TestAnnot.class));
+    }
+
+    @Test
+    public void overriddenMethodAnnotations() throws Exception {
+        var method = SubclassVirtualMethod.class.getDeclaredMethod("g");
+        assertNull(method.getAnnotation(TestAnnot.class));
+
+        method = SuperclassVirtualMethod.class.getDeclaredMethod("g");
+        assertEquals(TestAnnot.class, method.getAnnotation(TestAnnot.class).annotationType());
+    }
+
+    @Test
+    public void parameterAnnotationsRead() throws Exception {
+        var method = ClassWithParameterAnnotations.class.getMethod("m", int.class, String.class, Object.class);
+        var paramAnnotations = method.getParameterAnnotations();
+        assertEquals(3, paramAnnotations.length);
+
+        assertEquals(1, paramAnnotations[0].length);
+        assertEquals(TestAnnot.class, paramAnnotations[0][0].annotationType());
+
+        assertEquals(0, paramAnnotations[1].length);
+
+        assertEquals(1, paramAnnotations[2].length);
+        assertEquals(TestAnnot.class, paramAnnotations[2][0].annotationType());
+    }
+
+    @Test
+    public void parameterAnnotationsEmptyOnUnannotatedMethod() throws Exception {
+        var method = ClassWithParameterAnnotations.class.getMethod("noAnnotations", int.class);
+        var paramAnnotations = method.getParameterAnnotations();
+        assertEquals(1, paramAnnotations.length);
+        assertEquals(0, paramAnnotations[0].length);
+    }
+
+    @Test
+    public void parameterAnnotationsReadForConstructor() throws Exception {
+        var ctor = ClassWithParameterAnnotations.class.getConstructor(int.class);
+        var paramAnnotations = ctor.getParameterAnnotations();
+        assertEquals(1, paramAnnotations.length);
+        assertEquals(1, paramAnnotations[0].length);
+        assertEquals(TestAnnot.class, paramAnnotations[0][0].annotationType());
+    }
+
+    @Test
+    public void checkedExceptionTypesRead() throws Exception {
+        var method = ClassWithCheckedExceptions.class.getMethod("m");
+        var exceptionTypes = method.getExceptionTypes();
+        assertEquals(2, exceptionTypes.length);
+        var names = Arrays.stream(exceptionTypes).map(Class::getName).sorted().collect(Collectors.toList());
+        assertEquals(List.of("java.io.IOException", "java.lang.InterruptedException"), names);
+        
+        method = ClassWithCheckedExceptions.class.getMethod("noExceptions");
+        exceptionTypes = method.getExceptionTypes();
+        assertEquals(0, exceptionTypes.length);
+        
+        var ctor = ClassWithCheckedExceptions.class.getDeclaredConstructor();
+        exceptionTypes = ctor.getExceptionTypes();
+        assertEquals(1, exceptionTypes.length);
+        assertEquals("java.io.IOException", exceptionTypes[0].getName());
+
+        method = ClassWithCheckedExceptions.class.getMethod("annotatedWithExceptions");
+        assertEquals(List.of("TestAnnot"), extractAnnotations(method));
+        exceptionTypes = method.getExceptionTypes();
+        assertEquals(1, exceptionTypes.length);
+        assertEquals("java.io.IOException", exceptionTypes[0].getName());
+        
+        method = ClassWithCheckedExceptions.class.getMethod("paramAnnotationsWithExceptions", int.class);
+        var paramAnnotations = method.getParameterAnnotations();
+        assertEquals(1, paramAnnotations.length);
+        assertEquals(1, paramAnnotations[0].length);
+        assertEquals(TestAnnot.class, paramAnnotations[0][0].annotationType());
+        exceptionTypes = method.getExceptionTypes();
+        assertEquals(1, exceptionTypes.length);
+        assertEquals("java.io.IOException", exceptionTypes[0].getName());
+    }
+
+    @Test
+    public void parameterAnnotationsCoexistWithMethodAnnotations() throws Exception {
+        var method = ClassWithParameterAnnotations.class.getMethod("annotatedMethod", int.class);
+        assertEquals(1, extractAnnotations(method).size());
+        var paramAnnotations = method.getParameterAnnotations();
+        assertEquals(1, paramAnnotations.length);
+        assertEquals(1, paramAnnotations[0].length);
+        assertEquals(TestAnnot.class, paramAnnotations[0][0].annotationType());
+    }
+    
+    @Test
+    public void asyncReflection() throws Exception {
+        var method = ClassWithAsyncMethod.class.getMethod("foo", int.class);
+        var result = method.invoke(null, 23);
+        assertEquals(25, result);
+        
+        var instance = new ClassWithAsyncMethod();
+        method = ClassWithAsyncMethod.class.getMethod("bar", int.class);
+        result = method.invoke(instance, 23);
+        assertEquals(25, result);
+    }
 
     private void callMethods() {
         new Foo().bar(null);
@@ -187,11 +309,20 @@ public class MethodTest {
         }
         return sb.toString().replace("org.teavm.classlib.java.lang.reflect.MethodTest$", "");
     }
+    
+    private List<? extends String> extractAnnotations(AnnotatedElement elem) {
+        return Arrays.stream(elem.getDeclaredAnnotations())
+                .map(a -> a.annotationType().getSimpleName())
+                .filter(a -> !Objects.equals(a, "Reflectable"))
+                .collect(Collectors.toList());
+    }
 
     static class Foo {
+        @TestAnnot
         Object value;
 
         @Reflectable
+        @TestAnnot
         public void accept(long l) {
         }
 
@@ -251,6 +382,7 @@ public class MethodTest {
         }
 
         @Reflectable
+        @TestAnnot
         private String g() {
             return "super";
         }
@@ -279,6 +411,7 @@ public class MethodTest {
 
     static class InterfaceImplementor implements SuperInterface {
         @Override
+        @Reflectable
         public void f() {
         }
 
@@ -314,6 +447,88 @@ public class MethodTest {
         @Reflectable
         public String g(short x) {
             return "g:" + x;
+        }
+    }
+    
+    static class ClassWithoutInitializerWithStaticMethod {
+        @Reflectable
+        public static String foo() {
+            return "result:foo";
+        }
+    }
+    
+    @Retention(RetentionPolicy.RUNTIME)
+    @Inherited
+    @interface TestAnnot {
+    }
+
+    static class ClassWithParameterAnnotations {
+        @Reflectable
+        public ClassWithParameterAnnotations(@TestAnnot int x) {
+        }
+
+        @Reflectable
+        public void m(@TestAnnot int x, String y, @TestAnnot Object z) {
+        }
+
+        @Reflectable
+        public void noAnnotations(int x) {
+        }
+
+        @Reflectable
+        @TestAnnot
+        public void annotatedMethod(@TestAnnot int x) {
+        }
+    }
+
+    static class ClassWithCheckedExceptions {
+        @Reflectable
+        public ClassWithCheckedExceptions() throws IOException {
+        }
+
+        @Reflectable
+        public void m() throws IOException, InterruptedException {
+        }
+
+        @Reflectable
+        public void noExceptions() {
+        }
+
+        @Reflectable
+        @TestAnnot
+        public void annotatedWithExceptions() throws IOException {
+        }
+
+        @Reflectable
+        public void paramAnnotationsWithExceptions(@TestAnnot int x) throws IOException {
+        }
+    }
+    
+    static class ClassWithAsyncMethod {
+        static {
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        
+        @Reflectable
+        public static int foo(int x) throws InterruptedException {
+            Thread.sleep(1);
+            ++x;
+            Thread.sleep(1);
+            ++x;
+            return x;
+        }
+        
+        @Reflectable
+        public int bar(int x) throws InterruptedException {
+            Thread.sleep(1);
+            ++x;
+            Thread.sleep(1);
+            ++x;
+            return x;
         }
     }
 }

@@ -17,11 +17,13 @@ package org.teavm.backend.c.generators;
 
 import org.teavm.backend.c.generate.CodeWriter;
 import org.teavm.backend.c.generate.FileGenerator;
+import org.teavm.backend.c.generate.GenerationContext;
 import org.teavm.backend.c.generate.IncludeManager;
 import org.teavm.backend.c.generate.StringPool;
 import org.teavm.backend.lowlevel.generate.NameProvider;
 import org.teavm.dependency.DependencyInfo;
 import org.teavm.diagnostics.Diagnostics;
+import org.teavm.model.ClassHierarchy;
 import org.teavm.model.ClassReaderSource;
 import org.teavm.model.MethodReference;
 import org.teavm.model.lowlevel.CallSiteDescriptor;
@@ -29,6 +31,8 @@ import org.teavm.model.lowlevel.CallSiteLocation;
 import org.teavm.model.lowlevel.ExceptionHandlerDescriptor;
 
 public interface GeneratorContext {
+    GenerationContext mainContext();
+
     CodeWriter writer();
 
     NameProvider names();
@@ -36,6 +40,10 @@ public interface GeneratorContext {
     Diagnostics diagnotics();
 
     ClassReaderSource classSource();
+
+    ClassReaderSource initialClassSource();
+
+    ClassHierarchy hierarchy();
 
     DependencyInfo dependencies();
 

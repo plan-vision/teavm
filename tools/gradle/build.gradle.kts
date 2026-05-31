@@ -26,6 +26,7 @@ description = "TeaVM Gradle plugin"
 dependencies {
     implementation(project(":core"))
     implementation(project(":tools:core"))
+    implementation(project(":tools:devserver:client"))
     implementation(project(":tools:deobfuscator-wasm-gc"))
 }
 
@@ -74,9 +75,12 @@ val createConfig by tasks.registering {
     val classlib = findArtifactCoordinates(":classlib")
     val jsoImpl = findArtifactCoordinates(":jso:impl")
     val metaprogrammingImpl = findArtifactCoordinates(":metaprogramming:impl")
+    val extensionProcessor = findArtifactCoordinates(":extension:processor")
+    val spi = findArtifactCoordinates(":extension:spi")
     val tools = findArtifactCoordinates(":tools:core")
     val cli = findArtifactCoordinates(":tools:cli")
     val junit = findArtifactCoordinates(":tools:junit")
+    val devServerRunner = findArtifactCoordinates(":tools:devserver:runner")
     doLast {
         val file = File(baseDir, "org/teavm/gradle/config/ArtifactCoordinates.java")
         file.parentFile.mkdirs()
@@ -88,6 +92,8 @@ val createConfig by tasks.registering {
                 public static final String JSO_APIS = "$jsoApis";
                 public static final String INTEROP = "$interop";
                 public static final String METAPROGRAMMING = "$metaprogramming";
+                public static final String SPI = "$spi";
+                public static final String EXTENSION_PROCESSOR = "$extensionProcessor";
                 
                 public static final String CLASSLIB = "$classlib";
                 public static final String JSO_IMPL = "$jsoImpl";
@@ -96,6 +102,8 @@ val createConfig by tasks.registering {
                 
                 public static final String TOOLS = "$tools";
                 public static final String CLI = "$cli";
+                
+                public static final String DEV_SERVER_RUNNER = "$devServerRunner";
             
                 private ArtifactCoordinates() {
                 }

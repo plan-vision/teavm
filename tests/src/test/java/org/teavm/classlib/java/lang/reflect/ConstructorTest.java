@@ -17,6 +17,8 @@ package org.teavm.classlib.java.lang.reflect;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
@@ -32,7 +34,7 @@ import org.teavm.junit.TestPlatform;
 
 @RunWith(TeaVMTestRunner.class)
 @EachTestCompiledSeparately
-@SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
+@SkipPlatform(TestPlatform.C)
 public class ConstructorTest {
     @Test
     public void constructorsEnumerated() {
@@ -93,10 +95,26 @@ public class ConstructorTest {
         assertEquals("42", instance.getB());
     }
 
+    @Test
+    public void annotationsRead() throws Exception {
+        var constructor = ReflectableType.class.getDeclaredConstructor();
+        assertEquals(TestAnnot.class, constructor.getAnnotation(TestAnnot.class).annotationType());
+        constructor = ReflectableType.class.getDeclaredConstructor(int.class);
+        assertNull(constructor.getAnnotation(TestAnnot.class));
+    }
+    
+    @Test
+    public void asyncConstructor() throws Exception {
+        var constructor = ClassWithAsyncConstructor.class.getDeclaredConstructor(int.class);
+        var instance = constructor.newInstance(23);
+        assertEquals(25, instance.x);
+    }
+
     static class ReflectableType {
         public int a;
         public Object b;
 
+        @TestAnnot
         @Reflectable protected ReflectableType() {
         }
 
@@ -119,6 +137,23 @@ public class ConstructorTest {
 
         public Object getB() {
             return b;
+        }
+    }
+    
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface TestAnnot {
+    }
+    
+    public static class ClassWithAsyncConstructor {
+        int x;
+        
+        @Reflectable    
+        public ClassWithAsyncConstructor(int x) throws InterruptedException { 
+            Thread.sleep(1);
+            ++x;
+            Thread.sleep(1);
+            ++x;
+            this.x = x;
         }
     }
 }

@@ -30,9 +30,12 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.objectweb.asm.tree.ClassNode;
 import org.teavm.cache.IncrementalDependencyProvider;
 import org.teavm.cache.IncrementalDependencyRegistration;
@@ -40,6 +43,7 @@ import org.teavm.callgraph.CallGraph;
 import org.teavm.common.CachedFunction;
 import org.teavm.common.ServiceRepository;
 import org.teavm.diagnostics.Diagnostics;
+import org.teavm.extension.ExtensionEnvironmentImpl;
 import org.teavm.interop.PlatformMarker;
 import org.teavm.model.AnnotationReader;
 import org.teavm.model.CallLocation;
@@ -62,6 +66,7 @@ import org.teavm.model.optimization.UnreachableBasicBlockEliminator;
 import org.teavm.model.util.ModelUtils;
 import org.teavm.model.util.ProgramUtils;
 import org.teavm.parsing.Parser;
+import org.teavm.parsing.resource.ResourceProvider;
 import org.teavm.vm.spi.ClassFilter;
 import org.teavm.vm.spi.ClassFilterContext;
 
@@ -74,6 +79,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
     static final boolean dependencyReport = System.getProperty("org.teavm.dependencyReport", "false").equals("true");
     private int classNameSuffix;
     private ClassReaderSource unprocessedClassSource;
+    private ResourceProvider resourceProvider;
     private DependencyClassSource classSource;
     ClassReaderSource agentClassSource;
     private ClassLoader classLoader;
@@ -90,7 +96,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
     private Deque<Runnable> tasks = new ArrayDeque<>();
     private Queue<Runnable> deferredTasks = new ArrayDeque<>();
     List<DependencyType> types = new ArrayList<>();
-    private Map<String, DependencyType> typeMap = new HashMap<>();
+    private Map<ValueType, DependencyType> typeMap = new HashMap<>();
     private DependencyAnalyzerInterruptor interruptor;
     private boolean interrupted;
     private Diagnostics diagnostics;
@@ -98,7 +104,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
     private DependencyAgent agent;
     Map<MethodReference, DependencyPlugin> dependencyPlugins = new HashMap<>();
     private boolean completing;
-    private Map<String, DependencyTypeFilter> superClassFilters = new HashMap<>();
+    private Map<ValueType, DependencyTypeFilter> superClassFilters = new HashMap<>();
     private List<DependencyNode> allNodes = new ArrayList<>();
     private ClassHierarchy classHierarchy;
     IncrementalCache incrementalCache = new IncrementalCache();
@@ -107,10 +113,14 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
     private Set<String> generatedClassNames = new HashSet<>();
     DependencyType classType;
     private List<ClassFilter> classFilters = new ArrayList<>();
+    boolean merging;
+    private ExtensionEnvironmentImpl extensionEnv;
 
-    DependencyAnalyzer(ClassReaderSource classSource, ClassLoader classLoader, ServiceRepository services,
-            Diagnostics diagnostics, ReferenceCache referenceCache, String[] platformTags) {
+    DependencyAnalyzer(ClassReaderSource classSource, ResourceProvider resourceProvider, ClassLoader classLoader,
+            ServiceRepository services, Diagnostics diagnostics, ReferenceCache referenceCache,
+            String[] platformTags, Supplier<Properties> properties) {
         this.unprocessedClassSource = classSource;
+        this.resourceProvider = resourceProvider;
         this.diagnostics = diagnostics;
         this.referenceCache = referenceCache;
         agent = new DependencyAgent(this);
@@ -126,14 +136,16 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
             }
             FieldDependency node = createFieldNode(preimage, field);
             if (field != null && field.getInitialValue() instanceof String) {
-                node.getValue().propagate(getType("java.lang.String"));
+                node.getValue().propagate(getType(ValueType.object("java.lang.String")));
             }
             return node;
         });
 
         classCache = new CachedFunction<>(this::createClassDependency);
 
-        classType = getType("java.lang.Class");
+        classType = getClassType("java.lang.Class");
+        extensionEnv = new ExtensionEnvironmentImpl(resourceProvider, classHierarchy, classLoader, diagnostics,
+                properties);
     }
 
     public void addClassFilter(ClassFilter filter) {
@@ -173,14 +185,22 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
         return interrupted;
     }
 
-    public DependencyType getType(String name) {
-        DependencyType type = typeMap.get(name);
+    public ResourceProvider getResourceProvider() {
+        return resourceProvider;
+    }
+
+    public DependencyType getType(ValueType valueType) {
+        DependencyType type = typeMap.get(valueType);
         if (type == null) {
-            type = new DependencyType(this, name, types.size());
+            type = new DependencyType(valueType, types.size());
             types.add(type);
-            typeMap.put(name, type);
+            typeMap.put(valueType, type);
         }
         return type;
+    }
+
+    public DependencyType getClassType(String className) {
+        return getType(ValueType.object(className));
     }
 
     public DependencyNode createNode() {
@@ -284,7 +304,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
     protected abstract void processMethod(MethodDependency methodDep);
 
     public void addDependencyListener(DependencyListener listener) {
-        listeners.add(listener);
+        listeners.add(Objects.requireNonNull(listener));
     }
 
     public void addClassTransformer(ClassHolderTransformer transformer) {
@@ -294,7 +314,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
     private int propagationDepth;
 
     void schedulePropagation(DependencyConsumer consumer, DependencyType type) {
-        if (!filterType(type.getName())) {
+        if (!filterType(type.getValueType())) {
             return;
         }
         if (propagationDepth < PROPAGATION_STACK_THRESHOLD) {
@@ -310,7 +330,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
         if (!consumer.destination.filter(type)) {
             return;
         }
-        if (!filterType(type.getName())) {
+        if (!filterType(type.getValueType())) {
             return;
         }
 
@@ -366,7 +386,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
         if (propagationDepth < PROPAGATION_STACK_THRESHOLD) {
             ++propagationDepth;
             for (DependencyType type : types) {
-                if (filterType(type.getName())) {
+                if (filterType(type.getValueType())) {
                     consumer.consume(type);
                 }
             }
@@ -374,7 +394,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
         } else {
             tasks.add(() -> {
                 for (DependencyType type : types) {
-                    if (filterType(type.getName())) {
+                    if (filterType(type.getValueType())) {
                         consumer.consume(type);
                     }
                 }
@@ -382,7 +402,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
         }
     }
 
-    boolean filterType(String type) {
+    boolean filterType(ValueType type) {
         return classFilters.stream().allMatch(filter -> filter.accept(filterContext, type));
     }
 
@@ -413,11 +433,19 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
 
                 ClassReader cls = dep.getClassReader();
                 if (cls.getParent() != null && !classCache.caches(cls.getParent())) {
-                    linkClass(cls.getParent());
+                    var parentDep = linkClass(cls.getParent());
+                    if (parentDep.isMissing()) {
+                        diagnostics.error(null, "Class {{c0}} extends {{c1}}, which is missing in the classpath",
+                                cls.getName(), cls.getParent());
+                    }
                 }
                 for (String iface : cls.getInterfaces()) {
                     if (!classCache.caches(iface)) {
-                        linkClass(iface);
+                        var itfDep = linkClass(iface);
+                        if (itfDep.isMissing()) {
+                            diagnostics.error(null, "Class {{c0}} implements {{c1}}, "
+                                    + "which is missing in the classpath", cls.getName(), iface);
+                        }
                     }
                 }
             }
@@ -848,6 +876,10 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
         return callGraph;
     }
 
+    public ExtensionEnvironmentImpl extensionEnvironment() {
+        return extensionEnv;
+    }
+
     public void addBootstrapMethodSubstitutor(MethodReference method, BootstrapMethodSubstitutor substitutor) {
         classSource.bootstrapMethodSubstitutors.put(method, substitutor);
     }
@@ -860,31 +892,30 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
         return incrementalCache;
     }
 
-    DependencyTypeFilter getSuperClassFilter(String superClass) {
-        DependencyTypeFilter result = superClassFilters.get(superClass);
+    DependencyTypeFilter getSuperClassFilter(ValueType superType) {
+        DependencyTypeFilter result = superClassFilters.get(superType);
         if (result == null) {
-            if (superClass.startsWith("[")) {
-                char second = superClass.charAt(1);
-                if (second == '[') {
-                    result = new SuperArrayFilter(this, getSuperClassFilter(superClass.substring(1)));
-                } else if (second == 'L') {
-                    ValueType.Object itemType = (ValueType.Object) ValueType.parse(superClass.substring(1));
-                    result = new SuperArrayFilter(this, getSuperClassFilter(itemType.getClassName()));
+            if (superType instanceof ValueType.Array) {
+                var superArray = (ValueType.Array) superType;
+                if (superArray.getItemType() instanceof ValueType.Primitive) {
+                    result = new ExactTypeFilter(getType(superType));
                 } else {
-                    result = new ExactTypeFilter(getType(superClass));
+                    result = new SuperArrayFilter(this, getSuperClassFilter(superArray.getItemType()));
                 }
-            } else {
-                if (superClass.equals("java.lang.Object")) {
+            } else if (superType instanceof ValueType.Object) {
+                var superClass = (ValueType.Object) superType;
+                if (superClass.getClassName().equals("java.lang.Object")) {
                     result = t -> true;
                 } else {
-                    result = new SuperClassFilter(this, getType(superClass));
+                    result = new SuperClassFilter(this, superClass.getClassName());
                 }
+            } else {
+                result = t -> false;
             }
-            superClassFilters.put(superClass, result);
+            superClassFilters.put(superType, result);
         }
         return result;
     }
-
 
     static class IncrementalCache implements IncrementalDependencyProvider, IncrementalDependencyRegistration {
         private final String[] emptyArray = new String[0];

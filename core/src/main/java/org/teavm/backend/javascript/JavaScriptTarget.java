@@ -35,6 +35,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.function.Function;
 import org.teavm.ast.ControlFlowEntry;
@@ -51,6 +52,7 @@ import org.teavm.backend.javascript.intrinsics.ref.ReferenceQueueTransformer;
 import org.teavm.backend.javascript.intrinsics.ref.WeakReferenceDependencyListener;
 import org.teavm.backend.javascript.intrinsics.ref.WeakReferenceGenerator;
 import org.teavm.backend.javascript.intrinsics.ref.WeakReferenceTransformer;
+import org.teavm.backend.javascript.intrinsics.reflection.ReflectionIntrinsics;
 import org.teavm.backend.javascript.rendering.NameFrequencyEstimator;
 import org.teavm.backend.javascript.rendering.Renderer;
 import org.teavm.backend.javascript.rendering.RenderingContext;
@@ -65,6 +67,7 @@ import org.teavm.backend.javascript.spi.MethodContributorContext;
 import org.teavm.backend.javascript.templating.JavaScriptTemplateFactory;
 import org.teavm.cache.EmptyMethodNodeCache;
 import org.teavm.cache.MethodNodeCache;
+import org.teavm.classlib.ReflectionSupplier;
 import org.teavm.debugging.information.DebugInformationEmitter;
 import org.teavm.debugging.information.DummyDebugInformationEmitter;
 import org.teavm.debugging.information.SourceLocation;
@@ -100,8 +103,12 @@ import org.teavm.model.transformation.NullCheckFilter;
 import org.teavm.model.transformation.NullCheckInsertion;
 import org.teavm.model.util.DefaultVariableCategoryProvider;
 import org.teavm.model.util.VariableCategoryProvider;
+import org.teavm.reflection.AnnotationGenerationHelper;
+import org.teavm.reflection.ReflectionDependencyListener;
+import org.teavm.runtime.reflect.ClassInfo;
 import org.teavm.vm.BuildTarget;
 import org.teavm.vm.RenderingException;
+import org.teavm.vm.TeaVM;
 import org.teavm.vm.TeaVMTarget;
 import org.teavm.vm.TeaVMTargetController;
 import org.teavm.vm.spi.RendererListener;
@@ -134,6 +141,8 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
     private JSModuleType moduleType = JSModuleType.UMD;
     private List<ExportedDeclaration> exports = new ArrayList<>();
     private int maxTopLevelNames = 80_000;
+
+    private ReflectionDependencyListener reflection;
 
     @Override
     public List<ClassHolderTransformer> getTransformers() {
@@ -244,15 +253,18 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
 
     @Override
     public void contributeDependencies(DependencyAnalyzer dependencyAnalyzer) {
+        var reflectionSuppliers = new ArrayList<ReflectionSupplier>();
+        for (var supplier : ServiceLoader.load(ReflectionSupplier.class, dependencyAnalyzer.getClassLoader())) {
+            reflectionSuppliers.add(supplier);
+        }
+        reflection = new ReflectionDependencyListener(reflectionSuppliers, new AnnotationGenerationHelper());
+        addVirtualMethods((ctx, method) -> reflection.isVirtual(method));
+
         MethodDependency dep;
 
-        DependencyType stringType = dependencyAnalyzer.getType("java.lang.String");
+        DependencyType stringType = dependencyAnalyzer.getClassType("java.lang.String");
 
-        dep = dependencyAnalyzer.linkMethod(new MethodReference(Class.class.getName(), "getClass",
-                ValueType.object("org.teavm.platform.PlatformClass"), ValueType.parse(Class.class)));
-        dep.getVariable(0).propagate(dependencyAnalyzer.getType("org.teavm.platform.PlatformClass"));
-        dep.getResult().propagate(dependencyAnalyzer.getType("java.lang.Class"));
-        dep.use();
+        dependencyAnalyzer.linkMethod(new MethodReference(Class.class, "create", ClassInfo.class, Class.class)).use();
 
         dep = dependencyAnalyzer.linkMethod(new MethodReference(String.class, "<init>", Object.class, void.class));
         dep.getVariable(0).propagate(stringType);
@@ -261,30 +273,31 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         dependencyAnalyzer.linkField(new FieldReference(String.class.getName(), "characters"));
 
         dep = dependencyAnalyzer.linkMethod(new MethodReference(Object.class, "toString", String.class));
-        dep.getVariable(0).propagate(dependencyAnalyzer.getType("java.lang.Object"));
+        dep.getVariable(0).propagate(dependencyAnalyzer.getClassType("java.lang.Object"));
         dep.use();
 
         var exceptionCons = dependencyAnalyzer.linkMethod(new MethodReference(
                 RuntimeException.class, "<init>", String.class, void.class));
-        exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getType(RuntimeException.class.getName()));
+        exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getClassType(RuntimeException.class.getName()));
         exceptionCons.getVariable(1).propagate(stringType);
         exceptionCons.use();
 
         if (strict) {
             exceptionCons = dependencyAnalyzer.linkMethod(new MethodReference(
                     ArrayIndexOutOfBoundsException.class, "<init>", void.class));
-            exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getType(
+            exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getClassType(
                     ArrayIndexOutOfBoundsException.class.getName()));
             exceptionCons.use();
 
             exceptionCons = dependencyAnalyzer.linkMethod(new MethodReference(
                     NullPointerException.class, "<init>", void.class));
-            exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getType(NullPointerException.class.getName()));
+            exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getClassType(
+                    NullPointerException.class.getName()));
             exceptionCons.use();
 
             exceptionCons = dependencyAnalyzer.linkMethod(new MethodReference(
                     ClassCastException.class, "<init>", void.class));
-            exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getType(ClassCastException.class.getName()));
+            exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getClassType(ClassCastException.class.getName()));
             exceptionCons.use();
         }
 
@@ -307,17 +320,18 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         });
 
         dependencyAnalyzer.addDependencyListener(new WeakReferenceDependencyListener());
+        dependencyAnalyzer.addDependencyListener(reflection);
     }
 
     public static void includeStackTraceMethods(DependencyAnalyzer dependencyAnalyzer) {
         MethodDependency dep;
 
-        DependencyType stringType = dependencyAnalyzer.getType("java.lang.String");
+        DependencyType stringType = dependencyAnalyzer.getClassType("java.lang.String");
 
         dep = dependencyAnalyzer.linkMethod(new MethodReference(
                 StackTraceElement.class, "<init>", String.class, String.class, String.class,
                 int.class, void.class));
-        dep.getVariable(0).propagate(dependencyAnalyzer.getType(StackTraceElement.class.getName()));
+        dep.getVariable(0).propagate(dependencyAnalyzer.getClassType(StackTraceElement.class.getName()));
         dep.getVariable(1).propagate(stringType);
         dep.getVariable(2).propagate(stringType);
         dep.getVariable(3).propagate(stringType);
@@ -325,9 +339,9 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
 
         dep = dependencyAnalyzer.linkMethod(new MethodReference(
                 Throwable.class, "setStackTrace", StackTraceElement[].class, void.class));
-        dep.getVariable(0).propagate(dependencyAnalyzer.getType(Throwable.class.getName()));
-        dep.getVariable(1).propagate(dependencyAnalyzer.getType("[Ljava/lang/StackTraceElement;"));
-        dep.getVariable(1).getArrayItem().propagate(dependencyAnalyzer.getType(StackTraceElement.class.getName()));
+        dep.getVariable(0).propagate(dependencyAnalyzer.getClassType(Throwable.class.getName()));
+        dep.getVariable(1).propagate(dependencyAnalyzer.getType(ValueType.parse(StackTraceElement[].class)));
+        dep.getVariable(1).getArrayItem().propagate(dependencyAnalyzer.getClassType(StackTraceElement.class.getName()));
         dep.use();
     }
 
@@ -371,7 +385,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
 
         var methodContributorContext = new MethodContributorContextImpl(classes);
         RenderingContext renderingContext = new RenderingContext(debugEmitterToUse,
-                controller.getUnprocessedClassSource(), classes,
+                controller.getUnprocessedClassSource(), classes, controller.getResourceProvider(),
                 controller.getClassLoader(), controller.getServices(), controller.getProperties(), naming,
                 controller.getDependencyInfo(),
                 m -> isVirtual(methodContributorContext, m),
@@ -384,6 +398,8 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
             }
         };
         renderingContext.setMinifying(obfuscated);
+        new ReflectionIntrinsics(methodInjectors, methodGenerators, injectorProviders, classes, reflection,
+                controller.getDependencyInfo()).apply();
 
         if (controller.wasCancelled()) {
             return;
@@ -403,9 +419,10 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         }
 
         var rememberingWriter = new RememberingSourceWriter(debugEmitter != null);
-        var renderer = new Renderer(rememberingWriter, asyncMethods, renderingContext, controller.getDiagnostics(),
-                methodGenerators, astCache, controller.getCacheStatus(), templateFactory, exports,
-                controller.getEntryPoint());
+        var metadataWriter = new RememberingSourceWriter(debugEmitter != null);
+        var renderer = new Renderer(rememberingWriter, metadataWriter, asyncMethods, renderingContext,
+                controller.getDiagnostics(), methodGenerators, astCache, controller.getCacheStatus(),
+                templateFactory, exports, controller.getEntryPoint());
         renderer.setProperties(controller.getProperties());
         renderer.setProgressConsumer(controller::reportProgress);
 
@@ -417,24 +434,13 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         }
         var declarations = rememberingWriter.save();
         rememberingWriter.clear();
+        var metadata = metadataWriter.save();
+        metadataWriter.clear();
 
         renderer.renderStringPool();
         renderer.renderStringConstants();
         renderer.renderCompatibilityStubs();
-
-        var alias = "$rt_export_main";
-        var ref = new MethodReference(controller.getEntryPoint(), "main", ValueType.parse(String[].class),
-                ValueType.parse(void.class));
-        if (classes.resolve(ref) != null) {
-            rememberingWriter.startVariableDeclaration().appendFunction(alias)
-                    .appendFunction("$rt_mainStarter").append("(").appendMethod(ref);
-            rememberingWriter.append(")").endDeclaration();
-            rememberingWriter.appendFunction(alias).append(".")
-                    .append("javaException").ws().append("=").ws().appendFunction("$rt_javaException")
-                    .append(";").newLine();
-            exports.add(new ExportedDeclaration(w -> w.appendFunction(alias),
-                    n -> n.functionName(alias), controller.getEntryPointName()));
-        }
+        emitMainMethod(classes, rememberingWriter);
 
         for (var listener : rendererListeners) {
             listener.complete();
@@ -445,6 +451,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         var runtimeRenderer = new RuntimeRenderer(classes, rememberingWriter, controller.getClassInitializerInfo());
         runtimeRenderer.prepareAstParts(renderer.isThreadLibraryUsed());
         declarations.replay(runtimeRenderer.sink, RememberedSource.FILTER_REF);
+        metadata.replay(runtimeRenderer.sink, RememberedSource.FILTER_REF);
         epilogue.replay(runtimeRenderer.sink, RememberedSource.FILTER_REF);
         runtimeRenderer.removeUnusedParts();
         runtimeRenderer.renderRuntime();
@@ -466,6 +473,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         runtime.replay(frequencyEstimator, RememberedSource.FILTER_REF);
         runtimeEpilogue.replay(frequencyEstimator, RememberedSource.FILTER_REF);
         declarations.replay(frequencyEstimator, RememberedSource.FILTER_REF);
+        metadata.replay(frequencyEstimator, RememberedSource.FILTER_REF);
         epilogue.replay(frequencyEstimator, RememberedSource.FILTER_REF);
         frequencyEstimator.apply(naming);
 
@@ -480,6 +488,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         int start = sourceWriter.getOffset();
         runtime.write(sourceWriter, 0);
         declarations.write(sourceWriter, 0);
+        metadata.write(sourceWriter, 0);
         runtimeEpilogue.write(sourceWriter, 0);
         epilogue.write(sourceWriter, 0);
 
@@ -488,6 +497,43 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
 
         int totalSize = sourceWriter.getOffset() - start;
         printStats(sourceWriter, totalSize);
+    }
+
+    private void emitMainMethod(ClassReaderSource classes, SourceWriter writer) {
+        var alias = "$rt_export_main";
+        var ref = new MethodReference(controller.getEntryPoint(), TeaVM.MAIN_METHOD_DESC);
+        var mainMethod = classes.resolve(ref);
+        var hasMainMethod = false;
+        var instanceEntryPoint = false;
+
+        if (mainMethod != null) {
+            instanceEntryPoint = !mainMethod.hasModifier(ElementModifier.STATIC);
+            hasMainMethod = true;
+        } else {
+            ref = new MethodReference(controller.getEntryPoint(), TeaVM.SHORT_MAIN_METHOD_DESC);
+            mainMethod = classes.resolve(ref);
+            if (mainMethod != null) {
+                instanceEntryPoint = true;
+                hasMainMethod = true;
+            }
+        }
+        if (hasMainMethod) {
+            if (instanceEntryPoint) {
+                writer.startVariableDeclaration().appendFunction(alias)
+                        .appendFunction("$rt_instanceMainStarter").append("(").appendMethod(ref)
+                        .append(",").ws().appendMethod(controller.getEntryPoint(), "<init>", ValueType.VOID)
+                        .append(",").ws().appendClass(controller.getEntryPoint()).append(")").endDeclaration();
+            } else {
+                writer.startVariableDeclaration().appendFunction(alias)
+                        .appendFunction("$rt_mainStarter").append("(").appendMethod(ref);
+                writer.append(")").endDeclaration();
+            }
+            writer.appendFunction(alias).append(".")
+                    .append("javaException").ws().append("=").ws().appendFunction("$rt_javaException")
+                    .append(";").newLine();
+            exports.add(new ExportedDeclaration(w -> w.appendFunction(alias),
+                    n -> n.functionName(alias), controller.getEntryPointName()));
+        }
     }
 
     private void printWrapperStart(SourceWriter writer) {

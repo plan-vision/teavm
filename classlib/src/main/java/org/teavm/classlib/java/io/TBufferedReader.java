@@ -16,14 +16,12 @@
 package org.teavm.classlib.java.io;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.function.Predicate;
 import org.teavm.classlib.java.lang.TIllegalArgumentException;
 import org.teavm.classlib.java.lang.TMath;
 import org.teavm.classlib.java.lang.TStringBuilder;
 import org.teavm.classlib.java.util.TArrays;
 import org.teavm.classlib.java.util.stream.TStream;
-import org.teavm.classlib.java.util.stream.impl.TSimpleStreamImpl;
+import org.teavm.classlib.java.util.stream.impl.TBufferedReaderLinesStream;
 
 public class TBufferedReader extends TReader {
     private TReader innerReader;
@@ -69,13 +67,19 @@ public class TBufferedReader extends TReader {
         if (index == count && eof) {
             return -1;
         }
+        if (len == 0) {
+            return 0;
+        }
         int charsRead = 0;
-        while (charsRead < len) {
+        while (true) {
             int n = TMath.min(count - index, len - charsRead);
             System.arraycopy(buffer, index, cbuf, off, n);
             off += n;
             index += n;
             charsRead += n;
+            if (charsRead == len) {
+                break;
+            }
             if (charsRead > 0 && !innerReader.ready() || !fillBuffer(0, len - charsRead)) {
                 break;
             }
@@ -119,30 +123,7 @@ public class TBufferedReader extends TReader {
     }
 
     public TStream<String> lines() {
-        return new TSimpleStreamImpl<>() {
-            private boolean done;
-
-            @Override
-            public boolean next(Predicate<? super String> consumer) {
-                if (!done) {
-                    while (true) {
-                        try {
-                            var line = readLine();
-                            if (line == null) {
-                                break;
-                            }
-                            if (!consumer.test(line)) {
-                                return true;
-                            }
-                        } catch (IOException e) {
-                            throw new UncheckedIOException(e);
-                        }
-                    }
-                    done = true;
-                }
-                return false;
-            }
-        };
+        return new TBufferedReaderLinesStream(this);
     }
 
     @Override

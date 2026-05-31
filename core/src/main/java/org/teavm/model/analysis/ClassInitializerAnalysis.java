@@ -143,7 +143,7 @@ public class ClassInitializerAnalysis implements ClassInitializerInfo {
     }
 
     private boolean isDynamicInitializer(MethodInfo methodInfo, String className) {
-        if (methodInfo.anyFieldModified) {
+        if (methodInfo.anyFieldModified || methodInfo.complete) {
             return true;
         }
         if (methodInfo.classesWithModifiedFields != null) {
@@ -258,8 +258,8 @@ public class ClassInitializerAnalysis implements ClassInitializerInfo {
                 List<? extends VariableReader> arguments, InvocationType type) {
             if (type == InvocationType.VIRTUAL) {
                 var instanceDep = methodDep.getVariable(instance.getIndex());
-                var implementations = Devirtualization.implementations(hierarchy, dependencyInfo,
-                        instanceDep.getTypes(), method);
+                var types = instanceDep.getTypes();
+                var implementations = Devirtualization.implementations(hierarchy, dependencyInfo, types, method);
                 for (var implementation : implementations) {
                     invokeMethod(implementation);
                 }
@@ -315,7 +315,7 @@ public class ClassInitializerAnalysis implements ClassInitializerInfo {
                 return;
             }
 
-            if (calledMethod.anyFieldModified) {
+            if (calledMethod.anyFieldModified || calledMethod.complete) {
                 methodInfo.anyFieldModified = true;
                 methodInfo.classesWithModifiedFields = null;
             } else if (calledMethod.classesWithModifiedFields != null) {

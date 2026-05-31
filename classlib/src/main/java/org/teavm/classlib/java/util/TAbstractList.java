@@ -60,7 +60,7 @@ public abstract class TAbstractList<E> extends TAbstractCollection<E> implements
                 removeIndex = -1;
             }
             private void checkConcurrentModification() {
-                if (modCount < TAbstractList.this.modCount) {
+                if (modCount != TAbstractList.this.modCount) {
                     throw new TConcurrentModificationException();
                 }
             }
@@ -198,7 +198,7 @@ public abstract class TAbstractList<E> extends TAbstractCollection<E> implements
         private int sz;
         public TListIteratorImpl(int i, int lastModCount, int sz) {
             this.i = i;
-            this.j = i;
+            this.j = -1;
             this.lastModCount = lastModCount;
             this.sz = sz;
         }
@@ -224,17 +224,20 @@ public abstract class TAbstractList<E> extends TAbstractCollection<E> implements
             }
             --sz;
             lastModCount = modCount;
+            j = -1;
         }
         @Override public boolean hasPrevious() {
             return i > 0;
         }
         @Override public E previous() {
             checkConcurrentModification();
-            j = i - 1;
-            if (j < 0) {
+            var next = i - 1;
+            if (next < 0) {
                 throw new TNoSuchElementException();
             }
-            return get((i--) - 1);
+            i = next;
+            j = next;
+            return get(next);
         }
         @Override public int nextIndex() {
             return i;
@@ -255,7 +258,7 @@ public abstract class TAbstractList<E> extends TAbstractCollection<E> implements
             j = -1;
         }
         private void checkConcurrentModification() {
-            if (lastModCount < modCount) {
+            if (lastModCount != modCount) {
                 throw new TConcurrentModificationException();
             }
         }

@@ -16,7 +16,9 @@
 package org.teavm.backend.wasm;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import org.teavm.backend.wasm.model.WasmBlockType;
 import org.teavm.backend.wasm.model.WasmFunctionType;
 import org.teavm.backend.wasm.model.WasmModule;
 import org.teavm.backend.wasm.model.WasmType;
@@ -32,13 +34,23 @@ public class WasmFunctionTypes {
 
     public WasmFunctionType get(WasmSignature signature) {
         return types.computeIfAbsent(signature, k -> {
-            var type = new WasmFunctionType(null, signature.getReturnType(), signature.getParameterTypes());
+            var type = new WasmFunctionType(null, signature.getReturnTypes(), signature.getParameterTypes());
             module.types.add(type);
             return type;
         });
     }
 
     public WasmFunctionType of(WasmType returnType, WasmType... parameterTypes) {
-        return get(new WasmSignature(returnType, parameterTypes));
+        return get(new WasmSignature(returnType != null ? List.of(returnType) : List.of(), List.of(parameterTypes)));
+    }
+
+    public WasmBlockType blockType(List<? extends WasmType> types) {
+        if (types.isEmpty()) {
+            return null;
+        } else if (types.size() == 1) {
+            return types.get(0).asBlock();
+        } else {
+            return get(new WasmSignature(List.copyOf(types), List.of())).asBlock();
+        }
     }
 }

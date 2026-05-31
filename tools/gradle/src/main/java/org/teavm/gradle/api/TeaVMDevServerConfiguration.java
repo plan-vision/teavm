@@ -15,13 +15,11 @@
  */
 package org.teavm.gradle.api;
 
+import org.gradle.api.file.ConfigurableFileCollection;
+import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 
 public interface TeaVMDevServerConfiguration {
-    Property<Boolean> getStackDeobfuscated();
-
-    Property<Boolean> getIndicator();
-
     Property<Boolean> getAutoReload();
 
     Property<Integer> getPort();
@@ -29,6 +27,14 @@ public interface TeaVMDevServerConfiguration {
     Property<String> getProxyUrl();
 
     Property<String> getProxyPath();
+
+    ConfigurableFileCollection getStaticDirs();
+
+    Property<String> getStaticServePath();
+
+    ListProperty<String> getResourceRoots();
+
+    Property<String> getResourceServePath();
 
     Property<Integer> getProcessMemory();
 }

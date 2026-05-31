@@ -83,8 +83,6 @@ public interface BuildStrategy {
 
     void setWasmVersion(WasmBinaryVersion wasmVersion);
 
-    void setWasmExceptionsUsed(boolean wasmExceptionsUsed);
-
     void setWasmDebugInfoLevel(WasmDebugInfoLevel wasmDebugInfoLevel);
 
     void setWasmDebugInfoLocation(WasmDebugInfoLocation wasmDebugInfoLocation);
@@ -95,7 +93,7 @@ public interface BuildStrategy {
 
     void setMinDirectBuffersSize(int minDirectBuffersSize);
 
-    void setMaxDirectBuffersSize(int maxDirectBuffersSize);
+    void setSharedBuffer(boolean sharedBuffer);
 
     void setHeapDump(boolean heapDump);
 

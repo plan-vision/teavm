@@ -119,12 +119,15 @@ public class HeapTest {
         var size = Heap.getCurrentSize() - 8;
         var a = Heap.alloc(size);
         dump();
+        check();
         assertEquals(8, a.diff(Heap.getStart()));
         assertEquals(initialSize, Heap.getCurrentSize());
 
         var b = Heap.alloc(256);
+        dump();
         assertEquals(16 + size, b.diff(Heap.getStart()));
         assertTrue(initialSize < Heap.getCurrentSize());
+        check();
     }
 
     @Test
@@ -150,16 +153,108 @@ public class HeapTest {
         dump();
         assertEquals(32, b.diff(Heap.getStart()));
     }
+    
+    @Test
+    public void simpleExpand() {
+        var a = Heap.alloc(3);
+        dump();
+        assertEquals(8, a.diff(Heap.getStart()));
+        
+        a = Heap.realloc(a, 23);
+        assertEquals(8, a.diff(Heap.getStart()));
+        dump();
+        check();
+    }
+    
+    @Test
+    public void expandExisting() {
+        var a = Heap.alloc(3);
+        dump();
+        assertEquals(8, a.diff(Heap.getStart()));
+        
+        var b = Heap.alloc(23);
+        dump();
+        assertEquals(32, b.diff(Heap.getStart()));
+
+        var c = Heap.alloc(3);
+        dump();
+        assertEquals(64, c.diff(Heap.getStart()));
+        
+        Heap.release(b);
+        dump();
+        check();
+        
+        a = Heap.realloc(a, 23);
+        dump();
+        check();
+        assertEquals(8, a.diff(Heap.getStart()));
+    }
+
+    @Test
+    public void expandExistingFull() {
+        var a = Heap.alloc(3);
+        dump();
+        assertEquals(8, a.diff(Heap.getStart()));
+
+        var b = Heap.alloc(23);
+        dump();
+        assertEquals(32, b.diff(Heap.getStart()));
+
+        var c = Heap.alloc(3);
+        dump();
+        assertEquals(64, c.diff(Heap.getStart()));
+
+        Heap.release(b);
+        dump();
+        check();
+
+        a = Heap.realloc(a, 32);
+        dump();
+        check();
+        assertEquals(8, a.diff(Heap.getStart()));
+    }
+    
+    @Test
+    public void expandCopy() {
+        var a = Heap.alloc(3);
+        dump();
+        assertEquals(8, a.diff(Heap.getStart()));
+
+        var b = Heap.alloc(23);
+        dump();
+        assertEquals(32, b.diff(Heap.getStart()));
+        
+        a = Heap.realloc(a, 23);
+        assertEquals(64, a.diff(Heap.getStart()));
+        dump();
+        check();
+    }
+    
+    @Test
+    public void expandAndGrow() {
+        var a = Heap.alloc(3);
+        dump();
+        assertEquals(8, a.diff(Heap.getStart()));
+        
+        a = Heap.realloc(a, 2 * 1024 * 1024);
+        assertEquals(8, a.diff(Heap.getStart()));
+        dump();
+        check();
+    }
 
     // This test is not stable, so I would not add it to CI.
     // Instead, it's useful to uncomment and run it when things should be updated in Heap
     public void randomAlloc() {
         var list = new ArrayList<Integer>();
         var random = new Random();
-        for (var i = 0; i < 1000; ++i) {
-            if (random.nextBoolean()) {
-                var size = random.nextInt(2048);
+        for (var i = 0; i < 10000; ++i) {
+            if (random.nextInt(100) > 40) {
+                var size = random.nextInt(1024 * 32);
                 var addr = Heap.alloc(size).toInt();
+                if (addr == 0) {
+                    System.out.println("Could not allocate chunk of " + size + " bytes");
+                    continue;
+                }
                 list.add(addr);
                 System.out.println("Allocated " + size + " at " + (addr - Heap.getStart().toInt()));
                 dump();

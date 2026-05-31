@@ -15,6 +15,8 @@
  */
 package org.teavm.model;
 
+import java.util.List;
+
 public interface MethodReader extends MemberReader {
     ValueType getResultType();
 
@@ -28,11 +30,11 @@ public interface MethodReader extends MemberReader {
 
     ValueType parameterType(int index);
 
-    int genericParameterCount();
-
     GenericValueType genericParameterType(int index);
 
     ValueType[] getParameterTypes();
+
+    GenericValueType[] getGenericParameterTypes();
 
     AnnotationContainerReader parameterAnnotation(int index);
 
@@ -45,4 +47,6 @@ public interface MethodReader extends MemberReader {
     ProgramReader getProgram();
 
     AnnotationValue getAnnotationDefault();
+
+    List<? extends String> getThrownTypes();
 }

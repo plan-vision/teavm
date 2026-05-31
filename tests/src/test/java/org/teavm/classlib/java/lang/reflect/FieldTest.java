@@ -15,29 +15,39 @@
  */
 package org.teavm.classlib.java.lang.reflect;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.teavm.classlib.support.Reflectable;
 import org.teavm.junit.EachTestCompiledSeparately;
-import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTestRunner;
 import org.teavm.junit.TestPlatform;
 
 @RunWith(TeaVMTestRunner.class)
 @EachTestCompiledSeparately
-@SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
 public class FieldTest {
     @Test
     public void fieldsEnumerated() {
         new ReflectableType();
         StringBuilder sb = new StringBuilder();
-        for (Field field : ReflectableType.class.getDeclaredFields()) {
+        var fields = new ArrayList<>(List.of(ReflectableType.class.getDeclaredFields()));
+        fields.sort(Comparator.comparing(Field::getName));
+        for (var field : fields) {
+            if (field.getName().equals("initialized") || field.getName().equals("e")) {
+                continue;
+            }
             sb.append(field).append(";");
         }
         assertEquals(""
@@ -45,10 +55,8 @@ public class FieldTest {
                 + "private boolean org.teavm.classlib.java.lang.reflect.FieldTest$ReflectableType.b;"
                 + "java.lang.Object org.teavm.classlib.java.lang.reflect.FieldTest$ReflectableType.c;"
                 + "java.lang.String org.teavm.classlib.java.lang.reflect.FieldTest$ReflectableType.d;"
-                + "long org.teavm.classlib.java.lang.reflect.FieldTest$ReflectableType.e;"
                 + "private static short org.teavm.classlib.java.lang.reflect.FieldTest$ReflectableType.f;"
-                + "long org.teavm.classlib.java.lang.reflect.FieldTest$ReflectableType.g;"
-                + "static boolean org.teavm.classlib.java.lang.reflect.FieldTest$ReflectableType.initialized;",
+                + "long org.teavm.classlib.java.lang.reflect.FieldTest$ReflectableType.g;",
                 sb.toString());
     }
 
@@ -74,22 +82,6 @@ public class FieldTest {
         Field field = instance.getClass().getDeclaredField("a");
         field.set(instance, 234);
         assertEquals(234, instance.a);
-    }
-
-    @Test(expected = IllegalAccessException.class)
-    @SkipJVM
-    public void fieldCannotBeRead() throws NoSuchFieldException, IllegalAccessException {
-        ReflectableType instance = new ReflectableType();
-        Field field = instance.getClass().getDeclaredField("e");
-        field.get(instance);
-    }
-
-    @Test(expected = IllegalAccessException.class)
-    @SkipJVM
-    public void fieldCannotBeWritten() throws NoSuchFieldException, IllegalAccessException {
-        ReflectableType instance = new ReflectableType();
-        Field field = instance.getClass().getDeclaredField("e");
-        field.set(instance, 1L);
     }
 
     @Test
@@ -142,7 +134,46 @@ public class FieldTest {
         assertEquals(23, instance.b);
     }
 
+    @Test
+    public void inheritedFieldsEnumerated() {
+        var sb = new StringBuilder();
+        
+        var fields = FieldInheritanceSub.class.getFields();
+        assertNotNull(fields);
+        assertEquals(2, fields.length);
+
+        Arrays.sort(fields, Comparator.comparing(Field::toString));
+        for (var field : fields) {
+            sb.append(field.getDeclaringClass().getSimpleName()).append(".").append(field.getName()).append(";");
+        }
+
+        assertEquals("FieldInheritanceBase.base;FieldInheritanceSub.sub;", sb.toString());
+    }
+
+    @Test
+    public void getSetStaticFieldWithoutInitializer() throws Exception {
+        var field = ClassWithoutInitializerWithStaticField.class.getDeclaredField("foo");
+        ClassWithoutInitializerWithStaticField.foo = "q";
+        assertEquals("q", field.get(null));
+        field.set(null, "w");
+        assertEquals("w", ClassWithoutInitializerWithStaticField.foo);
+    }
+    
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void annotationsRead() throws Exception {
+        var field = ReflectableType.class.getDeclaredField("a");
+        var annot = field.getAnnotation(TestAnnot.class);
+        assertEquals(TestAnnot.class, annot.annotationType());
+        assertEquals(23, annot.a());
+        assertEquals("q", annot.b());
+        assertArrayEquals(new String[] { "w", "e" }, annot.c().strings());
+        field = ReflectableType.class.getDeclaredField("b");
+        assertNull(field.getAnnotation(TestAnnot.class));
+    }
+
     static class ReflectableType {
+        @TestAnnot(a = 23, b = "q", c = @InnerAnnot(strings = {"w", "e"})) 
         @Reflectable public int a;
         @Reflectable private boolean b;
         @Reflectable Object c;
@@ -183,5 +214,36 @@ public class FieldTest {
     static class SecondClassWithPrimitiveField {
         @Reflectable
         long b;
+    }
+
+    static class FieldInheritanceBase {
+        @Reflectable
+        public int base;
+        @Reflectable
+        int ignored;
+    }
+
+    static class FieldInheritanceSub extends FieldInheritanceBase {
+        @Reflectable
+        public String sub;
+    }
+
+    static class ClassWithoutInitializerWithStaticField {
+        @Reflectable
+        public static String foo;
+    }
+    
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface TestAnnot {
+        int a();
+        
+        String b();
+        
+        InnerAnnot c();
+    }
+
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface InnerAnnot {
+        String[] strings();
     }
 }

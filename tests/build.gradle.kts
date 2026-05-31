@@ -1,3 +1,6 @@
+import org.jetbrains.kotlin.gradle.dsl.jvm.JvmTargetValidationMode
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
+
 /*
  *  Copyright 2023 Alexey Andreev.
  *
@@ -24,14 +27,19 @@ plugins {
 description = "Tests"
 
 javaVersion {
-    version = JavaVersion.VERSION_21
+    version = JavaVersion.VERSION_25
 }
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
+
+kotlin {
+    jvmToolchain(25)
+}
+
 
 scala {
     scalaVersion = libs.versions.scala.get()
@@ -39,6 +47,7 @@ scala {
 
 dependencies {
     testImplementation(project(":core"))
+    testImplementation(project(":extension:spi"))
     testImplementation(project(":classlib"))
     testImplementation(project(":jso:apis"))
     testImplementation(project(":platform"))
@@ -51,6 +60,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.testng)
     testImplementation(libs.kotlin.serialization.json)
+    testAnnotationProcessor(project(":extension:processor"))
 }
 
 tasks.test {
@@ -64,19 +74,10 @@ tasks.test {
     systemProperty("teavm.junit.js.decodeStack", providers.gradleProperty("teavm.tests.decodeStack")
             .orElse("false").get())
 
-    systemProperty("teavm.junit.wasm", providers.gradleProperty("teavm.tests.wasm").orElse("true").get())
-    systemProperty("teavm.junit.wasm.runner", browser)
-    systemProperty("teavm.junit.wasm.disasm", providers.gradleProperty("teavm.tests.wasm.disasm")
-        .orElse("false").get())
-
     systemProperty("teavm.junit.wasm-gc", providers.gradleProperty("teavm.tests.wasm-gc").orElse("true").get())
     systemProperty("teavm.junit.wasm-gc.runner", browser)
     systemProperty("teavm.junit.wasm-gc.disasm", providers.gradleProperty("teavm.tests.wasm-gc.disasm")
         .orElse("false").get())
-
-    systemProperty("teavm.junit.wasi", providers.gradleProperty("teavm.tests.wasi").orElse("true").get())
-    systemProperty("teavm.junit.wasi.runner", providers.gradleProperty("teavm.tests.wasi.runner")
-            .orElse("./run-wasi.sh").get())
 
     systemProperty("teavm.junit.c", providers.gradleProperty("teavm.tests.c").orElse("true").get())
     systemProperty("teavm.junit.c.compiler", providers.gradleProperty("teavm.tests.c.compiler")
@@ -102,4 +103,8 @@ tasks.test {
 
     maxParallelForks = (Runtime.getRuntime().availableProcessors() * 2 / 3).coerceAtLeast(1)
     maxHeapSize = "800m"
+}
+
+tasks.withType<KotlinJvmCompile>().configureEach {
+    jvmTargetValidationMode.set(JvmTargetValidationMode.IGNORE)
 }

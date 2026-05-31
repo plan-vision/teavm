@@ -35,9 +35,10 @@ import org.teavm.classlib.java.util.stream.TIntStream;
 import org.teavm.classlib.java.util.stream.intimpl.TStringCharsStream;
 import org.teavm.classlib.java.util.stream.intimpl.TStringCodePointsStream;
 import org.teavm.dependency.PluggableDependency;
+import org.teavm.interop.Intrinsified;
 import org.teavm.interop.NoSideEffects;
 
-public class TString extends TObject implements TSerializable, TComparable<TString>, TCharSequence {
+public final class TString extends TObject implements TSerializable, TComparable<TString>, TCharSequence {
     private static final char[] EMPTY_CHARS = new char[0];
     private static final TString EMPTY = new TString();
     public static final TComparator<TString> CASE_INSENSITIVE_ORDER = (o1, o2) -> o1.compareToIgnoreCase(o2);
@@ -872,6 +873,7 @@ public class TString extends TObject implements TSerializable, TComparable<TStri
 
     @PluggableDependency(StringNativeDependency.class)
     @NoSideEffects
+    @Intrinsified
     public native TString intern();
 
     public boolean matches(String regex) {
@@ -967,5 +969,144 @@ public class TString extends TObject implements TSerializable, TComparable<TStri
             j += length();
         }
         return TString.fromArray(chars);
+    }
+
+    public TString translateEscapes() {
+        for (var i = 0; i < length(); ++i) {
+            var c = charAt(i);
+            if (c == '\\') {
+                return translateEscapesImpl();
+            }
+        }
+        return this;
+    }
+
+    private TString translateEscapesImpl() {
+        var chars = new char[length()];
+        var j = 0;
+        for (var i = 0; i < length(); ++i) {
+            var c = charAt(i);
+            if (c == '\\') {
+                ++i;
+                if (i == length()) {
+                    break;
+                }
+                switch (charAt(i)) {
+                    case 'b':
+                        chars[j++] = '\b';
+                        break;
+                    case 't':
+                        chars[j++] = '\t';
+                        break;
+                    case 'n':
+                        chars[j++] = '\n';
+                        break;
+                    case 'f':
+                        chars[j++] = '\f';
+                        break;
+                    case 'r':
+                        chars[j++] = '\r';
+                        break;
+                    case 's':
+                        chars[j++] = ' ';
+                        break;
+                    case '"':
+                        chars[j++] = '"';
+                        break;
+                    case '\'':
+                        chars[j++] = '\'';
+                        break;
+                    case '\\':
+                        chars[j++] = '\\';
+                        break;
+                    case '0':
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                    case '5':
+                    case '6':
+                    case '7': {
+                        var value = 0;
+                        var max = Math.min(3, length() - i);
+                        for (var k = 0; k < max; ++k) {
+                            c = charAt(i);
+                            if (c >= '0' && c <= '7') {
+                                value = (value << 3) + (c - '0');
+                                ++i;
+                            } else {
+                                break;
+                            }
+                        }
+                        chars[j++] = (char) value;
+                        break;
+                    }
+                }
+            } else {
+                chars[j++] = c;
+            }
+        }
+        return new TString(chars, 0, j);
+    }
+
+    public TString stripIndent() {
+        var bestIndentation = Integer.MAX_VALUE;
+        var i = 0;
+        outer: while (i < length()) {
+            var currentIndentation = 0;
+            char c;
+            while (true) {
+                c = charAt(i);
+                if (!Character.isWhitespace(c) || c == '\n' || c == '\r') {
+                    break;
+                }
+                ++currentIndentation;
+                if (++i == length()) {
+                    break outer;
+                }
+            }
+            if (currentIndentation == 0) {
+                return this;
+            }
+            bestIndentation = Math.min(bestIndentation, currentIndentation);
+            while (i < length()) {
+                c = charAt(i++);
+                if (c == '\r') {
+                    if (i < length() && charAt(i) == '\n') {
+                        ++i;
+                    }
+                    break;
+                } else if (c == '\n') {
+                    break;
+                }
+            }
+        }
+        if (bestIndentation == Integer.MAX_VALUE) {
+            return EMPTY;
+        }
+
+        var result = new char[length()];
+        var outIndex = 0;
+        i = 0;
+        while (i < length()) {
+            char c;
+            i += bestIndentation;
+            while (i < length()) {
+                c = charAt(i++);
+                if (c == '\r') {
+                    if (i < length() && charAt(i) == '\n') {
+                        ++i;
+                    }
+                    result[outIndex++] = '\n';
+                    break;
+                } else if (c == '\n') {
+                    result[outIndex++] = '\n';
+                    break;
+                } else {
+                    result[outIndex++] = c;
+                }
+            }
+        }
+        return new TString(result, 0, outIndex);
     }
 }

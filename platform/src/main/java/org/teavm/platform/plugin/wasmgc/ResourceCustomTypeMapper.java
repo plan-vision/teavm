@@ -18,9 +18,9 @@ package org.teavm.platform.plugin.wasmgc;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.teavm.backend.wasm.generate.gc.WasmGCNameProvider;
-import org.teavm.backend.wasm.generate.gc.classes.WasmGCCustomTypeMapper;
-import org.teavm.backend.wasm.generate.gc.classes.WasmGCTypeMapper;
+import org.teavm.backend.wasm.generate.WasmGCNameProvider;
+import org.teavm.backend.wasm.generate.classes.WasmGCCustomTypeMapper;
+import org.teavm.backend.wasm.generate.classes.WasmGCTypeMapper;
 import org.teavm.backend.wasm.model.WasmArray;
 import org.teavm.backend.wasm.model.WasmField;
 import org.teavm.backend.wasm.model.WasmModule;
@@ -61,12 +61,12 @@ public class ResourceCustomTypeMapper implements WasmGCCustomTypeMapper {
         }
 
         if (className.equals(Resource.class.getName())) {
-            return WasmType.Reference.EQ;
+            return WasmType.EQ;
         }
         if (className.equals(ResourceArray.class.getName())) {
             if (array == null) {
-                array = new WasmArray(names.topLevel(names.suggestForClass(className)),
-                        WasmType.Reference.EQ.asStorage());
+                array = new WasmArray(names.topLevel(names.suggestForArray(names.suggestForClass(className))),
+                        WasmType.EQ.asStorage());
                 array.setImmutable(true);
                 module.types.add(array);
             }

@@ -15,13 +15,11 @@
  */
 package org.teavm.jso.impl.wasmgc;
 
-import org.teavm.backend.wasm.gc.TeaVMWasmGCHost;
-import org.teavm.jso.JSObject;
-import org.teavm.jso.impl.JS;
+import static org.teavm.jso.impl.JSMethods.JS_CLASS;
+import org.teavm.backend.wasm.TeaVMWasmGCHost;
 import org.teavm.jso.impl.JSBodyRepository;
 import org.teavm.jso.impl.JSClassObjectToExpose;
 import org.teavm.jso.impl.JSWrapper;
-import org.teavm.model.MethodReference;
 import org.teavm.vm.spi.TeaVMHost;
 
 public final class WasmGCJso {
@@ -31,53 +29,32 @@ public final class WasmGCJso {
     public static void install(TeaVMHost host, TeaVMWasmGCHost wasmGCHost, JSBodyRepository jsBodyRepository) {
         host.add(new WasmGCJSDependencies());
         host.add(new WasmGCJSWrapperTransformer());
-        var jsFunctions = new WasmGCJSFunctions();
-        var commonGen = new WasmGCJsoCommonGenerator(jsFunctions);
-        wasmGCHost.addCustomTypeMapperFactory(new WasmGCJSTypeMapper());
-        wasmGCHost.addIntrinsicFactory(new WasmGCJSBodyRenderer(jsBodyRepository, jsFunctions, commonGen));
-        wasmGCHost.addGeneratorFactory(new WasmGCMarshallMethodGeneratorFactory(commonGen));
-        wasmGCHost.addClassConsumer((context, className) -> {
-            var cls = context.classes().get(className);
-            if (cls != null && cls.getAnnotations().get(JSClassObjectToExpose.class.getName()) != null) {
-                commonGen.getDefinedClass(WasmGCJsoContext.wrap(context), className);
+        wasmGCHost.contributeToCodeGen((ctx, reg) -> {
+            var jsFunctions = new WasmGCJSFunctions(ctx.functionTypes(), ctx.names(), ctx.module());
+            var commonGen = new WasmGCJsoCommonGenerator(jsFunctions, ctx.functionTypes(), ctx.classes(),
+                    ctx.functions(), ctx.typeMapper(), ctx.names(), ctx.strings(), ctx.module(),
+                    ctx.exceptionTag(), ctx.initializerRegistry(), ctx.entryPoint());
+            for (var className : ctx.classes().getClassNames()) {
+                var cls = ctx.classes().get(className);
+                if (cls.getAnnotations().get(JSClassObjectToExpose.class.getName()) != null) {
+                    commonGen.getDefinedClass(cls.getName());
+                }
             }
+            reg.inlineIntrinsics().registerIntrinsic(new WasmGCJSBodyRenderer(jsBodyRepository, jsFunctions,
+                    commonGen));
+            reg.bodyIntrinsics().registerIntrinsic(new WasmGCMarshallMethodGeneratorFactory(commonGen, ctx.classes(),
+                    ctx.typeMapper()));
+            reg.inlineIntrinsics().registerIntrinsic(JS_CLASS, new WasmGCJSIntrinsic(commonGen, jsFunctions,
+                    ctx.diagnostics(), ctx.classInfoProvider(), ctx.functions(), ctx.functionTypes(), ctx.names(),
+                    ctx.module(), ctx.exceptionTag()));
+            var runtimeIntrinsic = new WasmGCJSRuntimeIntrinsic(commonGen, ctx.classInfoProvider(), ctx.functions());
+            reg.inlineIntrinsics().registerIntrinsic(WasmGCJSRuntime.class, runtimeIntrinsic);
+            reg.inlineIntrinsics().registerIntrinsic(WasmGCJSRuntime.CharArrayData.class, runtimeIntrinsic);
+            reg.inlineIntrinsics().registerIntrinsic(WasmGCJSRuntime.NonNullExternal.class, runtimeIntrinsic);
+            reg.inlineIntrinsics().registerIntrinsic(JSWrapper.class, new WasmGCJSWrapperIntrinsic(ctx.typeMapper(),
+                    ctx.functions(), ctx.functionTypes(), ctx.module()));
         });
 
-        var jsIntrinsic = new WasmGCJSIntrinsic(commonGen, jsFunctions);
-        wasmGCHost.addIntrinsic(new MethodReference(JS.class, "wrap", String.class, JSObject.class), jsIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(JS.class, "unwrapString", JSObject.class, String.class),
-                jsIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(JS.class, "global", String.class, JSObject.class), jsIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(JS.class, "throwCCEIfFalse", boolean.class, JSObject.class,
-                JSObject.class), jsIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(JS.class, "isNull", JSObject.class, boolean.class), jsIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(JS.class, "jsArrayItem", Object.class, int.class, Object.class),
-                jsIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(JS.class, "get", JSObject.class, JSObject.class, JSObject.class),
-                jsIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(JS.class, "getPure", JSObject.class, JSObject.class,
-                JSObject.class), jsIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(JS.class, "importModule", String.class, JSObject.class),
-                jsIntrinsic);
-
-        var wrapperIntrinsic = new WasmGCJSWrapperIntrinsic();
-        wasmGCHost.addIntrinsic(new MethodReference(JSWrapper.class, "wrap", JSObject.class, Object.class),
-                wrapperIntrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(JSWrapper.class, "isJava", JSObject.class, boolean.class),
-                wrapperIntrinsic);
-
-        var runtimeInstrinsic = new WasmGCJSRuntimeIntrinsic(commonGen);
-        wasmGCHost.addIntrinsic(new MethodReference(WasmGCJSRuntime.class, "wrapObject", Object.class,
-                JSObject.class), runtimeInstrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(WasmGCJSRuntime.CharArrayData.class, "of", String.class,
-                WasmGCJSRuntime.CharArrayData.class), runtimeInstrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(WasmGCJSRuntime.CharArrayData.class, "asString", String.class),
-                runtimeInstrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(WasmGCJSRuntime.CharArrayData.class, "create", int.class,
-                WasmGCJSRuntime.CharArrayData.class), runtimeInstrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(WasmGCJSRuntime.CharArrayData.class, "put", int.class,
-                char.class, void.class), runtimeInstrinsic);
-        wasmGCHost.addIntrinsic(new MethodReference(WasmGCJSRuntime.NonNullExternal.class, "toNullable",
-                JSObject.class), runtimeInstrinsic);
+        wasmGCHost.addCustomTypeMapperFactory(new WasmGCJSTypeMapper());
     }
 }

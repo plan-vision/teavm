@@ -289,6 +289,68 @@ public class ArrayListTest {
         lit.add("x");
         assertEquals(List.of("d", "x", "a"), list);
     }
+    
+    @Test
+    public void concurrentModificationOverflow() {
+        var list = new ArrayList<>(List.of("a", "b"));
+        var iter = list.iterator();
+        var listIter = list.listIterator();
+        iter.next();
+        listIter.next();
+        
+        var count = 1 + (1 << 30);
+        for (var i = 0; i < count; ++i) {
+            list.add("c");
+            list.removeLast();
+        }
+        
+        try {
+            iter.next();
+            fail("Expected concurrent modification");
+        } catch (ConcurrentModificationException e) {
+            // expected
+        }
+        try {
+            listIter.next();
+            fail("Expected concurrent modification");
+        } catch (ConcurrentModificationException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void iterInvalidRemove() {
+        var list = new ArrayList<>(List.of("a", "b"));
+        try {
+            list.listIterator().remove();
+            fail("No exception thrown for initial state");
+        } catch (IllegalStateException e) {
+            // expected
+        }
+
+        var iter = list.listIterator();
+        iter.next();
+        iter.remove();
+        try {
+            iter.remove();
+            fail("No exception thrown for subsequent remove without advancing");
+        } catch (IllegalStateException e) {
+            // expected
+        }
+        
+        list = new ArrayList<>(List.of("a", "b"));
+        iter = list.listIterator(1);
+        iter.previous();
+        try {
+            iter.previous();
+            fail("No exception thrown");
+        } catch (NoSuchElementException e) {
+            // expected
+        }
+        
+        iter.remove();
+        assertEquals(List.of("b"), list);
+    }
 
     @Test
     public void sequenceCollectionMethodsOnEmpty() {

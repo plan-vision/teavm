@@ -15,7 +15,11 @@
  */
 package org.teavm.gradle.api;
 
+import groovy.lang.Closure;
+import groovy.lang.DelegatesTo;
+import org.gradle.api.Action;
 import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Nested;
 
 public interface TeaVMWasmGCConfiguration extends TeaVMCommonConfiguration, TeaVMWebConfiguration {
     Property<Boolean> getObfuscated();
@@ -25,8 +29,6 @@ public interface TeaVMWasmGCConfiguration extends TeaVMCommonConfiguration, TeaV
     Property<Boolean> getCopyRuntime();
 
     Property<Boolean> getDisassembly();
-
-    Property<String> getTargetFileName();
 
     Property<WasmDebugInfoLocation> getDebugInfoLocation();
 
@@ -40,5 +42,33 @@ public interface TeaVMWasmGCConfiguration extends TeaVMCommonConfiguration, TeaV
 
     Property<Integer> getMinDirectBuffersSize();
 
+    @Deprecated
     Property<Integer> getMaxDirectBuffersSize();
+
+    @Deprecated
+    Property<Boolean> getImportedWasmMemory();
+
+    Property<Boolean> getSharedBuffer();
+
+    @Nested
+    TeaVMEmscriptenConfiguration getEmscripten();
+
+    default void emscripten(Action<TeaVMEmscriptenConfiguration> action) {
+        action.execute(getEmscripten());
+    }
+
+    default void emscripten(@DelegatesTo(TeaVMEmscriptenConfiguration.class) Closure<?> action) {
+        action.rehydrate(getEmscripten(), action.getOwner(), action.getThisObject()).call();
+    }
+
+    @Nested
+    TeaVMDevServerConfiguration getDevServer();
+
+    default void devServer(Action<TeaVMDevServerConfiguration> action) {
+        action.execute(getDevServer());
+    }
+
+    default void devServer(@DelegatesTo(TeaVMDevServerConfiguration.class) Closure<?> action) {
+        action.rehydrate(getDevServer(), action.getOwner(), action.getThisObject()).call();
+    }
 }

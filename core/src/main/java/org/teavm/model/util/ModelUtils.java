@@ -53,6 +53,9 @@ public final class ModelUtils {
         target.setSimpleName(original.getSimpleName());
         target.getInnerClasses().addAll(original.getInnerClasses());
         copyAnnotations(original.getAnnotations(), target.getAnnotations());
+        if (original.getGenericParameters() != null) {
+            target.setGenericParameters(original.getGenericParameters());
+        }
         return target;
     }
 
@@ -72,6 +75,8 @@ public final class ModelUtils {
         MethodHolder copy = new MethodHolder(method.getDescriptor());
         copy.setLevel(method.getLevel());
         copy.getModifiers().addAll(method.readModifiers());
+        copy.setTypeParameters(method.getTypeParameters());
+        copy.setGenericSignature(method.getGenericResultType(), method.getGenericParameterTypes());
         if (method.getProgram() != null && withProgram) {
             copy.setProgram(ProgramUtils.copy(method.getProgram()));
         }
@@ -82,6 +87,7 @@ public final class ModelUtils {
         for (int i = 0; i < method.parameterCount(); ++i) {
             copyAnnotations(method.parameterAnnotation(i), copy.parameterAnnotation(i));
         }
+        copy.setThrownTypes(method.getThrownTypes());
         return copy;
     }
 
@@ -90,6 +96,7 @@ public final class ModelUtils {
         copy.setLevel(field.getLevel());
         copy.getModifiers().addAll(field.readModifiers());
         copy.setType(field.getType());
+        copy.setGenericType(field.getGenericType());
         copy.setInitialValue(field.getInitialValue());
         copyAnnotations(field.getAnnotations(), copy.getAnnotations());
         return copy;

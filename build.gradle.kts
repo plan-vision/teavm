@@ -16,8 +16,17 @@
 
 plugins {
     idea
+    `teavm-release`
 }
 
 group = "org.teavm"
 
 idea.module.excludeDirs.add(File(rootDir, "build-dir"))
+
+tasks.register("clean") {
+    group = "build"
+    val buildDir = project.layout.buildDirectory
+    doLast {
+        buildDir.get().asFile.deleteRecursively()
+    }
+}

@@ -22,7 +22,6 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import org.teavm.common.OptionalPredicate;
 import org.teavm.dependency.DependencyInfo;
 import org.teavm.dependency.MethodDependencyInfo;
 import org.teavm.dependency.ValueDependencyInfo;
@@ -46,7 +45,7 @@ public class Devirtualization {
     private Set<? extends MethodReference> readonlyVirtualMethods = Collections.unmodifiableSet(virtualMethods);
     private Map<ValueDependencyInfo, Map<MethodReference, Set<MethodReference>>> implementationCache =
             new HashMap<>();
-    private Map<ValueDependencyInfo, Map<ValueType, Optional<String>>> castCache = new HashMap<>();
+    private Map<ValueDependencyInfo, Map<ValueType, Optional<ValueType>>> castCache = new HashMap<>();
     private int virtualCallSites;
     private int directCallSites;
     private int remainingCasts;
@@ -107,20 +106,20 @@ public class Devirtualization {
         ValueDependencyInfo var = methodDep.getVariable(invoke.getInstance().getIndex());
         Set<MethodReference> implementations = getImplementations(var, invoke.getMethod());
         if (implementations.size() == 1) {
-            MethodReference resolvedImplementaiton = implementations.iterator().next();
+            MethodReference resolvedImplementation = implementations.iterator().next();
             if (shouldLog) {
                 System.out.print("DIRECT CALL " + invoke.getMethod() + " resolved to "
-                        + resolvedImplementaiton.getClassName());
+                        + resolvedImplementation.getClassName());
                 if (invoke.getLocation() != null) {
                     System.out.print(" at " + invoke.getLocation().getFileName() + ":"
                             + invoke.getLocation().getLine());
                 }
                 System.out.println();
             }
-            if (!resolvedImplementaiton.getClassName().equals(invoke.getMethod().getClassName())) {
+            if (!resolvedImplementation.getClassName().equals(invoke.getMethod().getClassName())) {
                 var cast = new CastInstruction();
                 cast.setValue(invoke.getInstance());
-                cast.setTargetType(ValueType.object(resolvedImplementaiton.getClassName()));
+                cast.setTargetType(ValueType.object(resolvedImplementation.getClassName()));
                 cast.setWeak(true);
                 cast.setReceiver(program.createVariable());
                 cast.setLocation(invoke.getLocation());
@@ -128,7 +127,7 @@ public class Devirtualization {
                 invoke.setInstance(cast.getReceiver());
             }
             invoke.setType(InvocationType.SPECIAL);
-            invoke.setMethod(resolvedImplementaiton);
+            invoke.setMethod(resolvedImplementation);
             directCallSites++;
         } else {
             virtualMethods.addAll(implementations);
@@ -184,7 +183,7 @@ public class Devirtualization {
         }
     }
 
-    private String getCastFailType(ValueDependencyInfo node, ValueType targetType) {
+    private ValueType getCastFailType(ValueDependencyInfo node, ValueType targetType) {
         if (dependency.isPrecise()) {
             return computeCastFailType(node, targetType);
         } else {
@@ -194,8 +193,8 @@ public class Devirtualization {
         }
     }
 
-    private String computeCastFailType(ValueDependencyInfo node, ValueType targetType) {
-        for (String type : node.getTypes()) {
+    private ValueType computeCastFailType(ValueDependencyInfo node, ValueType targetType) {
+        for (var type : node.getTypes()) {
             if (castCanFail(type, targetType)) {
                 return type;
             }
@@ -203,19 +202,8 @@ public class Devirtualization {
         return null;
     }
 
-    private boolean castCanFail(String type, ValueType target) {
-        if (type.startsWith("[")) {
-            ValueType valueType = ValueType.parse(type);
-            if (hierarchy.isSuperType(target, valueType, false)) {
-                return false;
-            }
-        } else if (target instanceof ValueType.Object) {
-            String targetClassName = ((ValueType.Object) target).getClassName();
-            if (hierarchy.isSuperType(targetClassName, type, false)) {
-                return false;
-            }
-        }
-        return true;
+    private boolean castCanFail(ValueType type, ValueType target) {
+        return !hierarchy.isSuperType(target, type, false);
     }
 
     private Set<MethodReference> getImplementations(ValueDependencyInfo value, MethodReference ref) {
@@ -228,19 +216,24 @@ public class Devirtualization {
     }
 
     public static Set<MethodReference> implementations(ClassHierarchy hierarchy, DependencyInfo dependency,
-            String[] classNames, MethodReference ref) {
-        OptionalPredicate<String> isSuperclass = hierarchy.getSuperclassPredicate(ref.getClassName());
+            ValueType[] types, MethodReference ref) {
+        var isSuperclass = hierarchy.getSuperclassPredicate(ref.getClassName());
         Set<MethodReference> methods = new LinkedHashSet<>();
         var arrayEncountered = false;
-        for (String className : classNames) {
-            if (className.startsWith("[")) {
+        for (var type : types) {
+            String className;
+            if (type instanceof ValueType.Array) {
                 if (arrayEncountered) {
                     continue;
                 }
                 arrayEncountered = true;
                 className = "java.lang.Object";
+            } else if (type instanceof ValueType.Object) {
+                className = ((ValueType.Object) type).getClassName();
+            } else {
+                continue;
             }
-            if (!isSuperclass.test(className, false)) {
+            if (!isSuperclass.test(ValueType.object(className), false)) {
                 continue;
             }
             ClassReader cls = hierarchy.getClassSource().get(className);

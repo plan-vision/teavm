@@ -34,14 +34,14 @@ public final class GCSupport {
     }
 
     public static void tryToTriggerGC(Reference<?> ref) {
-        if (PlatformDetector.isC() || PlatformDetector.isWebAssembly()) {
+        if (PlatformDetector.isC()) {
             System.gc();
             return;
         }
         var weakReferences = new ArrayList<WeakReference<Object>>();
-        for (var i = 0; i < 100; ++i) {
+        for (var i = 0; i < 25; ++i) {
             System.out.println("GC trigger attempt " + i);
-            weakReferences.add(new WeakReference<>(generateTree("R")));
+            weakReferences.add(generateGarbage());
             waitInJS();
             if (weakReferences.stream().anyMatch(s -> s.get() == null)) {
                 if (ref != null) {
@@ -54,15 +54,17 @@ public final class GCSupport {
             }
         }
     }
+    
+    private static WeakReference<Object> generateGarbage() {
+        return new WeakReference<>(generateTree("R"));
+    }
 
     private static void waitInJS() {
-        if (PlatformDetector.isJavaScript()) {
+        if (PlatformDetector.isJavaScript() || PlatformDetector.isWebAssemblyGC()) {
             var doc = HTMLDocument.current();
             var div = doc.createElement("div");
             div.appendChild(doc.createTextNode("hello"));
             doc.getBody().appendChild(div);
-            triggerGCInJS();
-            waitImpl();
             triggerGCInJS();
             waitImpl();
         } else {
@@ -74,7 +76,7 @@ public final class GCSupport {
     @Async
     private static native void waitImpl();
     private static void waitImpl(AsyncCallback<Void> callback) {
-        Window.setTimeout(() -> callback.complete(null), 0);
+        Window.setTimeout(() -> callback.complete(null), 500);
     }
 
     @JSBody(script = "if (typeof window.gc === 'function') { window.gc(); }")

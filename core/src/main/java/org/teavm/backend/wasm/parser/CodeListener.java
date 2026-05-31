@@ -16,25 +16,25 @@
 package org.teavm.backend.wasm.parser;
 
 import org.teavm.backend.wasm.model.WasmNumType;
-import org.teavm.backend.wasm.model.expression.WasmFloatBinaryOperation;
-import org.teavm.backend.wasm.model.expression.WasmFloatType;
-import org.teavm.backend.wasm.model.expression.WasmFloatUnaryOperation;
-import org.teavm.backend.wasm.model.expression.WasmInt32Subtype;
-import org.teavm.backend.wasm.model.expression.WasmInt64Subtype;
-import org.teavm.backend.wasm.model.expression.WasmIntBinaryOperation;
-import org.teavm.backend.wasm.model.expression.WasmIntType;
-import org.teavm.backend.wasm.model.expression.WasmIntUnaryOperation;
-import org.teavm.backend.wasm.model.expression.WasmSignedType;
+import org.teavm.backend.wasm.model.instruction.WasmFloatBinaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmFloatType;
+import org.teavm.backend.wasm.model.instruction.WasmFloatUnaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmInt32Subtype;
+import org.teavm.backend.wasm.model.instruction.WasmInt64Subtype;
+import org.teavm.backend.wasm.model.instruction.WasmIntBinaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmIntType;
+import org.teavm.backend.wasm.model.instruction.WasmIntUnaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmSignedType;
 
 public interface CodeListener {
     default void error(int depth) {
     }
 
-    default int startBlock(boolean loop, WasmHollowType type) {
+    default int startBlock(boolean loop, WasmHollowBlockType type) {
         return 0;
     }
 
-    default int startConditionalBlock(WasmHollowType type) {
+    default int startConditionalBlock(WasmHollowBlockType type) {
         return 0;
     }
 
@@ -46,6 +46,16 @@ public interface CodeListener {
     }
 
     default void startCatch(int tagIndex) {
+    }
+
+    default int tryTable(WasmHollowBlockType type) {
+        return 0;
+    }
+
+    default void catchTag(int tagIndex, boolean withRef, int depth, int target) {
+    }
+
+    default void catchAll(boolean withRef, int depth, int target) {
     }
 
     default void endBlock(int token, boolean loop) {

@@ -50,7 +50,7 @@ public class TLimitingDoubleStreamImpl extends TSimpleDoubleStreamImpl {
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         sourceStream.close();
     }
 }

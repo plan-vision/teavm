@@ -3,7 +3,7 @@ package org.teavm.jso.impl;
 /* allows custom JS generation of 
   $rt_callWithReceiver(...) in JSAliasGenertor.java (jso-impl) */
 public abstract class JSAliasRendererCustomWrapper {
-
+	
 	private static JSAliasRendererCustomWrapper val;
 	public static JSAliasRendererCustomWrapper get() {
 		return val;
@@ -12,5 +12,5 @@ public abstract class JSAliasRendererCustomWrapper {
 		JSAliasRendererCustomWrapper.val=val;
 	}
 	public abstract String generate(String classAndMethodName);
-
+	
 }
