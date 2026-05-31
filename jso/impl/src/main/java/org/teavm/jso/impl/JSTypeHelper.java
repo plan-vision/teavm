@@ -19,6 +19,7 @@ import static org.teavm.jso.impl.JSMethods.JS_OBJECT_CLASS;
 import java.util.HashMap;
 import java.util.Map;
 import org.teavm.jso.JSClass;
+import org.teavm.jso.JSObject;
 import org.teavm.model.ClassReader;
 import org.teavm.model.ClassReaderSource;
 import org.teavm.model.ElementModifier;
@@ -114,6 +115,9 @@ public class JSTypeHelper {
                 default:
                     return false;
             }
+        } else  if (itemType instanceof ValueType.Object && !((ValueType.Object)itemType).getClassName().equals(JSObject.class.getName()) ) {
+            // unwrap object references!
+            return true;
         } else {
             return false;
         }

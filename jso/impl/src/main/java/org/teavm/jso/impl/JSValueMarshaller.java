@@ -26,6 +26,7 @@ import org.teavm.jso.JSBufferType;
 import org.teavm.jso.JSClass;
 import org.teavm.jso.JSFunctor;
 import org.teavm.jso.JSModule;
+import org.teavm.jso.JSObject;
 import org.teavm.model.AnnotationContainerReader;
 import org.teavm.model.CallLocation;
 import org.teavm.model.ClassHierarchy;
@@ -383,7 +384,6 @@ class JSValueMarshaller {
         if (byRef) {
             return unwrapByRef(location, var, type);
         }
-
         if (type instanceof ValueType.Object) {
             String className = ((ValueType.Object) type).getClassName();
             ClassReader cls = classSource.get(className);
@@ -414,10 +414,14 @@ class JSValueMarshaller {
                     return invokeMethod(location, JSMethods.DATA_TO_DOUBLE_ARRAY, var);
                 default:
                     break;
-            }
+            } 
+        }  else if (type instanceof ValueType.Object) {
+            String className = ((ValueType.Object) type).getClassName();
+            if (!className.equals(JSObject.class.getName()))
+            	return invokeMethod(location, JSMethods.DATA_TO_ARRAY_OBJECT, var);
         }
         return invokeMethod(location, JSMethods.DATA_TO_ARRAY, var);
-    }
+    } 
 
     Variable unwrap(CallLocation location, Variable var, ValueType type, boolean strictJava) {
         if (type instanceof ValueType.Primitive) {
