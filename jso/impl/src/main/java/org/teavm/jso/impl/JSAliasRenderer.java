@@ -22,7 +22,6 @@ import org.teavm.backend.javascript.codegen.SourceWriter;
 import org.teavm.backend.javascript.rendering.RenderingManager;
 import org.teavm.backend.javascript.spi.MethodContributor;
 import org.teavm.backend.javascript.spi.MethodContributorContext;
-import org.teavm.jso.impl.JSAliasRendererCustomWrapper;
 import org.teavm.jso.JSClass;
 import org.teavm.model.AnnotationReader;
 import org.teavm.model.ClassReader;
@@ -43,7 +42,7 @@ class JSAliasRenderer implements RendererListener, MethodContributor {
     private JSTypeHelper typeHelper;
     private RenderingManager context;
     private int lastExportIndex;
- 
+
     @Override
     public void begin(RenderingManager context, BuildTarget buildTarget) {
         writer = context.getWriter();
@@ -102,25 +101,31 @@ class JSAliasRenderer implements RendererListener, MethodContributor {
                 .softNewLine();
 
         JSAliasRendererCustomWrapper customImpl = JSAliasRendererCustomWrapper.get();
-        
+
         for (var aliasEntry : members.methods.entrySet()) {
 
-        	if (classReader.getMethod(aliasEntry.getValue().getDescriptor()) == null) {
+            if (classReader.getMethod(
+                aliasEntry.getValue().getDescriptor()
+            ) == null) {
                 continue;
             }
-            appendMethodAlias(aliasEntry.getKey());            
+            appendMethodAlias(aliasEntry.getKey());
 
-            // support for custom implementation wrapper 
-            
-            String impl =  customImpl == null ? null : customImpl.generate(aliasEntry.getValue().getClassName()+"."+aliasEntry.getKey());
-            if (impl == null) // default
-            	writer.ws().append("=").ws().appendFunction("$rt_callWithReceiver").append("(")
-            		.appendMethod(aliasEntry.getValue()).append(");").softNewLine();
-            else // custom
-            	writer.ws().append("=").ws().append(impl).append("(")
-        		.appendMethod(aliasEntry.getValue()).append(");").softNewLine();
+            // Support for custom implementation wrapper.
+            String impl = customImpl == null
+                    ? null
+                    : customImpl.generate(
+                            aliasEntry.getValue().getClassName() + "." + aliasEntry.getKey()
+                    );
+            if (impl == null) {
+                writer.ws().append("=").ws().appendFunction("$rt_callWithReceiver").append("(")
+                        .appendMethod(aliasEntry.getValue()).append(");").softNewLine();
+            } else {
+                writer.ws().append("=").ws().append(impl).append("(")
+                        .appendMethod(aliasEntry.getValue()).append(");").softNewLine();
+            }
         }
-        
+
         for (var aliasEntry : members.properties.entrySet()) {
             var propInfo = aliasEntry.getValue();
             if (propInfo.getter == null || classReader.getMethod(propInfo.getter.getDescriptor()) == null) {

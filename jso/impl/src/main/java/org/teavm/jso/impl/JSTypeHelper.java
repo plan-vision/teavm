@@ -115,9 +115,9 @@ public class JSTypeHelper {
                 default:
                     return false;
             }
-        } else  if (itemType instanceof ValueType.Object && !((ValueType.Object)itemType).getClassName().equals(JSObject.class.getName()) ) {
+        } else if (itemType instanceof ValueType.Object) {
             // unwrap object references!
-            return true;
+            return !((ValueType.Object) itemType).getClassName().equals(JSObject.class.getName());
         } else {
             return false;
         }
