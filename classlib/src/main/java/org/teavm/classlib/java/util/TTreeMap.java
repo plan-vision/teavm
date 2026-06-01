@@ -777,6 +777,10 @@ public class TTreeMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
             var newPath = owner.pathToNext(last.getKey(), reverse);
             System.arraycopy(newPath, 0, path, 0, newPath.length);
             depth = newPath.length;
+
+            // FIX: SET DEPTH 0 IF END
+            checkFinished();
+
             modCount = ++owner.modCount;
             last = null;
         }
