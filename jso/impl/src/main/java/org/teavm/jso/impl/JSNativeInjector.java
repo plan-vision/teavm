@@ -397,9 +397,8 @@ public class JSNativeInjector implements Injector, DependencyPlugin {
         var writer = context.getWriter();
         writer.appendFunction("$rt_wrapArray").append("(").appendFunction(className).append("(),").ws();
         writer.append("(function(a){for(var i=0;i<a.length;i++){var v=a[i];if(v===undefined)a[i]=null;"
-                + "else switch(typeof v){case'string':a[i]=")
-                .appendFunction("$rt_str").append("(v);break;case'bigint':a[i]=")
-                .appendFunction("Long_create").append("(v)}}return a})(");
+                + "else if(typeof v==='string')a[i]=")
+                .appendFunction("$rt_str").append("(v)}return a})(");
         context.writeExpr(context.getArgument(0), Precedence.min());
         writer.append("))");
     }
